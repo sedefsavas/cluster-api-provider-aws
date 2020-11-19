@@ -27,7 +27,7 @@ import (
 
 	"gopkg.in/yaml.v2"
 
-	"sigs.k8s.io/cluster-api-provider-aws/api/v1alpha3"
+	"sigs.k8s.io/cluster-api-provider-aws/api/v1alpha4"
 	cfn_bootstrap "sigs.k8s.io/cluster-api-provider-aws/cmd/clusterawsadm/cloudformation/bootstrap"
 	"sigs.k8s.io/cluster-api-provider-aws/cmd/clusterawsadm/credentials"
 )
@@ -38,9 +38,9 @@ func newBootstrapTemplate(e2eCtx *E2EContext) *cfn_bootstrap.Template {
 	By("Creating a bootstrap AWSIAMConfiguration")
 	t := cfn_bootstrap.NewTemplate()
 	t.Spec.BootstrapUser.Enable = true
-	t.Spec.SecureSecretsBackends = []v1alpha3.SecretBackend{
-		v1alpha3.SecretBackendSecretsManager,
-		v1alpha3.SecretBackendSSMParameterStore,
+	t.Spec.SecureSecretsBackends = []v1alpha4.SecretBackend{
+		v1alpha4.SecretBackendSecretsManager,
+		v1alpha4.SecretBackendSSMParameterStore,
 	}
 	region, err := credentials.ResolveRegion("")
 	Expect(err).NotTo(HaveOccurred())

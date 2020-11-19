@@ -24,7 +24,7 @@ Because the bootstrap script has no required fields other than the EKS cluster's
 
 ```yaml
 kind: EKSConfig
-apiVersion: bootstrap.cluster.x-k8s.io/v1alpha3
+apiVersion: bootstrap.cluster.x-k8s.io/v1alpha4
 metadata:
   name: my-config
 spec: {}
@@ -34,7 +34,7 @@ The only configuration option available is `kubeletExtraArgs`, which is a `map[s
 
 ```yaml
 kind: EKSConfig
-apiVersion: bootstrap.cluster.x-k8s.io/v1alpha3
+apiVersion: bootstrap.cluster.x-k8s.io/v1alpha4
 metadata:
   name: my-config
 spec:
