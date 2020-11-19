@@ -14,11 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1alpha2
+package v1alpha4
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha2"
+	clusterv1 "github.com/sedefsavas/cluster-api/api/v1alpha4"
 	"sigs.k8s.io/cluster-api/errors"
 )
 
@@ -26,6 +26,17 @@ const (
 	// MachineFinalizer allows ReconcileAWSMachine to clean up AWS resources associated with AWSMachine before
 	// removing it from the apiserver.
 	MachineFinalizer = "awsmachine.infrastructure.cluster.x-k8s.io"
+)
+
+// SecretBackend defines variants for backend secret storage.
+type SecretBackend string
+
+var (
+	// SecretBackendSSMParameterStore defines AWS Systems Manager Parameter Store as the secret backend
+	SecretBackendSSMParameterStore = SecretBackend("ssm-parameter-store")
+
+	// SecretBackendSecretsManager defines AWS Secrets Manager as the secret backend
+	SecretBackendSecretsManager = SecretBackend("secrets-manager")
 )
 
 // AWSMachineSpec defines the desired state of AWSMachine
@@ -36,8 +47,26 @@ type AWSMachineSpec struct {
 	// AMI is the reference to the AMI from which to create the machine instance.
 	AMI AWSResourceReference `json:"ami,omitempty"`
 
+	// ImageLookupFormat is the AMI naming format to look up the image for this
+	// machine It will be ignored if an explicit AMI is set. Supports
+	// substitutions for {{.BaseOS}} and {{.K8sVersion}} with the base OS and
+	// kubernetes version, respectively. The BaseOS will be the value in
+	// ImageLookupBaseOS or ubuntu (the default), and the kubernetes version as
+	// defined by the packages produced by kubernetes/release without v as a
+	// prefix: 1.13.0, 1.12.5-mybuild.1, or 1.17.3. For example, the default
+	// image format of capa-ami-{{.BaseOS}}-?{{.K8sVersion}}-* will end up
+	// searching for AMIs that match the pattern capa-ami-ubuntu-?1.18.0-* for a
+	// Machine that is targeting kubernetes v1.18.0 and the ubuntu base OS. See
+	// also: https://golang.org/pkg/text/template/
+	// +optional
+	ImageLookupFormat string `json:"imageLookupFormat,omitempty"`
+
 	// ImageLookupOrg is the AWS Organization ID to use for image lookup if AMI is not set.
 	ImageLookupOrg string `json:"imageLookupOrg,omitempty"`
+
+	// ImageLookupBaseOS is the name of the base operating system to use for
+	// image lookup the AMI is not set.
+	ImageLookupBaseOS string `json:"imageLookupBaseOS,omitempty"`
 
 	// InstanceType is the type of instance to create. Example: m4.xlarge
 	InstanceType string `json:"instanceType,omitempty"`
@@ -66,22 +95,27 @@ type AWSMachineSpec struct {
 	// +optional
 	AdditionalSecurityGroups []AWSResourceReference `json:"additionalSecurityGroups,omitempty"`
 
-	// AvailabilityZone is references the AWS availability zone to use for this instance.
-	// If multiple subnets are matched for the availability zone, the first one return is picked.
-	// +optional
-	AvailabilityZone *string `json:"availabilityZone,omitempty"`
+	// FailureDomain is the failure domain unique identifier this Machine should be attached to, as defined in Cluster API.
+	// For this infrastructure provider, the ID is equivalent to an AWS Availability Zone.
+	// If multiple subnets are matched for the availability zone, the first one returned is picked.
+	FailureDomain *string `json:"failureDomain,omitempty"`
 
 	// Subnet is a reference to the subnet to use for this instance. If not specified,
 	// the cluster subnet will be used.
 	// +optional
 	Subnet *AWSResourceReference `json:"subnet,omitempty"`
 
-	// SSHKeyName is the name of the ssh key to attach to the instance.
-	SSHKeyName string `json:"sshKeyName,omitempty"`
-
-	// RootDeviceSize is the size of the root volume in gigabytes(GB).
+	// SSHKeyName is the name of the ssh key to attach to the instance. Valid values are empty string (do not use SSH keys), a valid SSH key name, or omitted (use the default SSH key name)
 	// +optional
-	RootDeviceSize int64 `json:"rootDeviceSize,omitempty"`
+	SSHKeyName *string `json:"sshKeyName,omitempty"`
+
+	// RootVolume encapsulates the configuration options for the root volume
+	// +optional
+	RootVolume *Volume `json:"rootVolume,omitempty"`
+
+	// Configuration options for the non root storage volumes.
+	// +optional
+	NonRootVolumes []*Volume `json:"nonRootVolumes,omitempty"`
 
 	// NetworkInterfaces is a list of ENIs to associate with the instance.
 	// A maximum of 2 may be specified.
@@ -89,20 +123,36 @@ type AWSMachineSpec struct {
 	// +kubebuilder:validation:MaxItems=2
 	NetworkInterfaces []string `json:"networkInterfaces,omitempty"`
 
+	// UncompressedUserData specify whether the user data is gzip-compressed before it is sent to ec2 instance.
+	// cloud-init has built-in support for gzip-compressed user data
+	// user data stored in aws secret manager is always gzip-compressed.
+	//
+	// +optional
+	UncompressedUserData *bool `json:"uncompressedUserData,omitempty"`
+
 	// CloudInit defines options related to the bootstrapping systems where
 	// CloudInit is used.
 	// +optional
-	CloudInit *CloudInit `json:"cloudInit,omitempty"`
+	CloudInit CloudInit `json:"cloudInit,omitempty"`
+
+	// SpotMarketOptions allows users to configure instances to be run using AWS Spot instances.
+	// +optional
+	SpotMarketOptions *SpotMarketOptions `json:"spotMarketOptions,omitempty"`
+
+	// Tenancy indicates if instance should run on shared or single-tenant hardware.
+	// +optional
+	// +kubebuilder:validation:Enum:=default;dedicated;host
+	Tenancy string `json:"tenancy,omitempty"`
 }
 
 // CloudInit defines options related to the bootstrapping systems where
 // CloudInit is used.
 type CloudInit struct {
-	// enableSecureSecretsManager, when set to true will use AWS Secrets Manager to ensure
-	// userdata privacy. A cloud-init boothook shell script is prepended to download
+	// InsecureSkipSecretsManager, when set to true will not use AWS Secrets Manager
+	// or AWS Systems Manager Parameter Store to ensure privacy of userdata.
+	// By default, a cloud-init boothook shell script is prepended to download
 	// the userdata from Secrets Manager and additionally delete the secret.
-	// +optional
-	EnableSecureSecretsManager bool `json:"enableSecureSecretsManager,omitempty"`
+	InsecureSkipSecretsManager bool `json:"insecureSkipSecretsManager,omitempty"`
 
 	// SecretCount is the number of secrets used to form the complete secret
 	// +optional
@@ -113,6 +163,14 @@ type CloudInit struct {
 	// the workload cluster.
 	// +optional
 	SecretPrefix string `json:"secretPrefix,omitempty"`
+
+	// SecureSecretsBackend, when set to parameter-store will utilize the AWS Systems Manager
+	// Parameter Storage to distribute secrets. By default or with the value of secrets-manager,
+	// will use AWS Secrets Manager instead.
+	// +optional
+	// +kubebuilder:default=secrets-manager
+	// +kubebuilder:validation:Enum=secrets-manager;ssm-parameter-store
+	SecureSecretsBackend SecretBackend `json:"secureSecretsBackend,omitempty"`
 }
 
 // AWSMachineStatus defines the observed state of AWSMachine
@@ -128,7 +186,7 @@ type AWSMachineStatus struct {
 	// +optional
 	InstanceState *InstanceState `json:"instanceState,omitempty"`
 
-	// ErrorReason will be set in the event that there is a terminal problem
+	// FailureReason will be set in the event that there is a terminal problem
 	// reconciling the Machine and will contain a succinct value suitable
 	// for machine interpretation.
 	//
@@ -145,9 +203,9 @@ type AWSMachineStatus struct {
 	// can be added as events to the Machine object and/or logged in the
 	// controller's output.
 	// +optional
-	ErrorReason *errors.MachineStatusError `json:"errorReason,omitempty"`
+	FailureReason *errors.MachineStatusError `json:"failureReason,omitempty"`
 
-	// ErrorMessage will be set in the event that there is a terminal problem
+	// FailureMessage will be set in the event that there is a terminal problem
 	// reconciling the Machine and will contain a more verbose string suitable
 	// for logging and human consumption.
 	//
@@ -164,12 +222,22 @@ type AWSMachineStatus struct {
 	// can be added as events to the Machine object and/or logged in the
 	// controller's output.
 	// +optional
-	ErrorMessage *string `json:"errorMessage,omitempty"`
+	FailureMessage *string `json:"failureMessage,omitempty"`
+
+	// Conditions defines current service state of the AWSMachine.
+	// +optional
+	Conditions clusterv1.Conditions `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:path=awsmachines,scope=Namespaced,categories=cluster-api
+// +kubebuilder:storageversion
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Cluster",type="string",JSONPath=".metadata.labels.cluster\\.x-k8s\\.io/cluster-name",description="Cluster to which this AWSMachine belongs"
+// +kubebuilder:printcolumn:name="State",type="string",JSONPath=".status.instanceState",description="EC2 instance state"
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.ready",description="Machine ready status"
+// +kubebuilder:printcolumn:name="InstanceID",type="string",JSONPath=".spec.providerID",description="EC2 instance ID"
+// +kubebuilder:printcolumn:name="Machine",type="string",JSONPath=".metadata.ownerReferences[?(@.kind==\"Machine\")].name",description="Machine object which owns with this AWSMachine"
 
 // AWSMachine is the Schema for the awsmachines API
 type AWSMachine struct {
@@ -178,6 +246,14 @@ type AWSMachine struct {
 
 	Spec   AWSMachineSpec   `json:"spec,omitempty"`
 	Status AWSMachineStatus `json:"status,omitempty"`
+}
+
+func (r *AWSMachine) GetConditions() clusterv1.Conditions {
+	return r.Status.Conditions
+}
+
+func (r *AWSMachine) SetConditions(conditions clusterv1.Conditions) {
+	r.Status.Conditions = conditions
 }
 
 // +kubebuilder:object:root=true
