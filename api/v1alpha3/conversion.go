@@ -24,7 +24,7 @@ import (
 func (src *AWSCluster) ConvertTo(dstRaw conversion.Hub) error {
 	dst := dstRaw.(*v1alpha4.AWSCluster)
 
-	return  Convert_v1alpha3_AWSCluster_To_v1alpha4_AWSCluster(src, dst, nil)
+	return Convert_v1alpha3_AWSCluster_To_v1alpha4_AWSCluster(src, dst, nil)
 }
 
 func (dst *AWSCluster) ConvertFrom(srcRaw conversion.Hub) error {

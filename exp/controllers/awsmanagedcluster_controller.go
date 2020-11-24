@@ -187,4 +187,5 @@ func (r *AWSManagedClusterReconciler) managedControlPlaneToManagedCluster(log lo
 				},
 			},
 		}
-	}}
+	}
+}
