@@ -16,7 +16,7 @@ limitations under the License.
 
 package v1alpha4
 
-import 	clusterv1 "github.com/sedefsavas/cluster-api/api/v1alpha4"
+import 	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha4"
 
 const (
 	// ASGReadyCondition reports on current status of the autoscaling group. Ready indicates the group is provisioned

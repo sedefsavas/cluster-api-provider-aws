@@ -16,8 +16,7 @@ limitations under the License.
 
 package v1alpha4
 
-import clusterv1 "github.com/sedefsavas/cluster-api/api/v1alpha4"
-
+import clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha4"
 
 const (
 	// VpcReady condition reports on the successful reconciliation of a VPC

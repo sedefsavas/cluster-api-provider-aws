@@ -18,9 +18,10 @@ package v1alpha4
 
 import (
 	"fmt"
-	"k8s.io/apimachinery/pkg/types"
 	"reflect"
-	clusterv1 "github.com/sedefsavas/cluster-api/api/v1alpha4"
+
+	"k8s.io/apimachinery/pkg/types"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha4"
 )
 
 // Tags defines a map of tags.

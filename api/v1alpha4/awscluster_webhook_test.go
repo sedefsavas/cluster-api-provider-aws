@@ -17,11 +17,12 @@ limitations under the License.
 package v1alpha4
 
 import (
-	"github.com/aws/aws-sdk-go/aws"
 	"testing"
 
 	. "github.com/onsi/gomega"
-	clusterv1 "github.com/sedefsavas/cluster-api/api/v1alpha4"
+
+	"github.com/aws/aws-sdk-go/aws"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha4"
 )
 
 func TestAWSCluster_ValidateCreate(t *testing.T) {

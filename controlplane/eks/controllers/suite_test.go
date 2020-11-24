@@ -30,7 +30,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	controlplanev1alpha3 "sigs.k8s.io/cluster-api-provider-aws/api/v1alpha3"
+	controlplanev1alpha4 "sigs.k8s.io/cluster-api-provider-aws/api/v1alpha4"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -62,10 +62,10 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).ToNot(HaveOccurred())
 	Expect(cfg).ToNot(BeNil())
 
-	err = controlplanev1alpha3.AddToScheme(scheme.Scheme)
+	err = controlplanev1alpha4.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = controlplanev1alpha3.AddToScheme(scheme.Scheme)
+	err = controlplanev1alpha4.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	// +kubebuilder:scaffold:scheme
