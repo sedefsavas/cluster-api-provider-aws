@@ -163,7 +163,6 @@ func setupReconcilers(ctx context.Context, mgr ctrl.Manager) {
 
 	if err := (&bootstrapv1controllers.EKSConfigReconciler{
 		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("EKSConfig"),
 	}).SetupWithManager(ctx, mgr, concurrency(eksConfigConcurrency)); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "EKSConfig")
 		os.Exit(1)

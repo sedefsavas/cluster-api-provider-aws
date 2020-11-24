@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
@@ -47,7 +48,6 @@ import (
 // AWSManagedMachinePoolReconciler reconciles a AWSManagedMachinePool object
 type AWSManagedMachinePoolReconciler struct {
 	client.Client
-	Log       logr.Logger
 	Recorder  record.EventRecorder
 	Endpoints []scope.ServiceEndpoint
 
@@ -56,15 +56,17 @@ type AWSManagedMachinePoolReconciler struct {
 
 // SetupWithManager is used to setup the controller
 func (r *AWSManagedMachinePoolReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, options controller.Options) error {
+	log := ctrl.LoggerFrom(ctx)
+
 	gvk, err := apiutil.GVKForObject(new(infrav1exp.AWSManagedMachinePool), mgr.GetScheme())
 	if err != nil {
 		return errors.Wrapf(err, "failed to find GVK for AWSManagedMachinePool")
 	}
-	managedControlPlaneToManagedMachinePoolMap := managedControlPlaneToManagedMachinePoolMapFunc(r.Client, gvk, r.Log)
+	managedControlPlaneToManagedMachinePoolMap := managedControlPlaneToManagedMachinePoolMapFunc(r.Client, gvk, log)
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&infrav1exp.AWSManagedMachinePool{}).
 		WithOptions(options).
-		WithEventFilter(predicates.ResourceNotPaused(r.Log)).
+		WithEventFilter(predicates.ResourceNotPaused(ctrl.LoggerFrom(ctx))).
 		Watches(
 			&source.Kind{Type: &capiv1exp.MachinePool{}},
 			handler.EnqueueRequestsFromMapFunc(machinePoolToInfrastructureMapFunc(gvk)),
@@ -224,13 +226,15 @@ func GetOwnerClusterKey(obj metav1.ObjectMeta) (*client.ObjectKey, error) {
 	return nil, nil
 }
 
-func managedControlPlaneToManagedMachinePoolMapFunc(c client.Client, gvk schema.GroupVersionKind, log logr.Logger) handler.ToRequestsFunc {
-	return func(o handler.MapObject) []reconcile.Request {
+func managedControlPlaneToManagedMachinePoolMapFunc(c client.Client, gvk schema.GroupVersionKind, log logr.Logger) handler.MapFunc {
+	return func(o client.Object) []reconcile.Request {
 		ctx := context.Background()
-		awsControlPlane, ok := o.Object.(*controlplanev1.AWSManagedControlPlane)
+
+		awsControlPlane, ok := o.(*controlplanev1.AWSManagedControlPlane)
 		if !ok {
-			return nil
+			panic(fmt.Sprintf("Expected a AWSManagedControlPlane but got a %T", o))
 		}
+
 		if !awsControlPlane.ObjectMeta.DeletionTimestamp.IsZero() {
 			return nil
 		}
@@ -256,9 +260,7 @@ func managedControlPlaneToManagedMachinePoolMapFunc(c client.Client, gvk schema.
 
 		var results []ctrl.Request
 		for i := range managedPoolForClusterList.Items {
-			managedPool := mapFunc.Map(handler.MapObject{
-				Object: &managedPoolForClusterList.Items[i],
-			})
+			managedPool := mapFunc(&managedPoolForClusterList.Items[i])
 			results = append(results, managedPool...)
 		}
 

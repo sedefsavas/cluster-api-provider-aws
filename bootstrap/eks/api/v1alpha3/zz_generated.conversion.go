@@ -27,6 +27,7 @@ import (
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	v1alpha4 "sigs.k8s.io/cluster-api-provider-aws/bootstrap/eks/api/v1alpha4"
 	apiv1alpha3 "sigs.k8s.io/cluster-api/api/v1alpha3"
+	apiv1alpha4 "sigs.k8s.io/cluster-api/api/v1alpha4"
 )
 
 func init() {
@@ -199,7 +200,7 @@ func autoConvert_v1alpha3_EKSConfigStatus_To_v1alpha4_EKSConfigStatus(in *EKSCon
 	out.FailureReason = in.FailureReason
 	out.FailureMessage = in.FailureMessage
 	out.ObservedGeneration = in.ObservedGeneration
-	out.Conditions = *(*apiv1alpha3.Conditions)(unsafe.Pointer(&in.Conditions))
+	out.Conditions = *(*apiv1alpha4.Conditions)(unsafe.Pointer(&in.Conditions))
 	return nil
 }
 

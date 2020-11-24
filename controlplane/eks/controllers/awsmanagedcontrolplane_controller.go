@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"github.com/go-logr/logr"
 	"time"
 
 	"github.com/pkg/errors"
@@ -68,7 +69,7 @@ func (r *AWSManagedControlPlaneReconciler) SetupWithManager(ctx context.Context,
 		WithEventFilter(predicates.ResourceNotPaused(log)).
 		Watches(
 			&source.Kind{Type: &infrav1exp.AWSManagedCluster{}},
-			handler.EnqueueRequestsFromMapFunc(r.managedClusterToManagedControlPlane),
+			handler.EnqueueRequestsFromMapFunc(r.managedClusterToManagedControlPlane(log)),
 		).
 		Build(r)
 
@@ -264,11 +265,10 @@ func (r *AWSManagedControlPlaneReconciler) reconcileDelete(_ context.Context, ma
 
 // ClusterToAWSManagedControlPlane is a handler.ToRequestsFunc to be used to enqueue requests for reconciliation
 // for AWSManagedControlPlane based on updates to a Cluster.
-func (r *AWSManagedControlPlaneReconciler) ClusterToAWSManagedControlPlane(o handler.MapObject) []ctrl.Request {
-	c, ok := o.Object.(*clusterv1.Cluster)
+func (r *AWSManagedControlPlaneReconciler) ClusterToAWSManagedControlPlane(o client.Object) []ctrl.Request {
+	c, ok := o.(*clusterv1.Cluster)
 	if !ok {
-		r.Log.Error(nil, fmt.Sprintf("Expected a Cluster but got a %T", o.Object))
-		return nil
+		panic(fmt.Sprintf("Expected a Cluster but got a %T", o))
 	}
 
 	controlPlaneRef := c.Spec.ControlPlaneRef
@@ -279,43 +279,44 @@ func (r *AWSManagedControlPlaneReconciler) ClusterToAWSManagedControlPlane(o han
 	return nil
 }
 
-func (r *AWSManagedControlPlaneReconciler) managedClusterToManagedControlPlane(o handler.MapObject) []ctrl.Request {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
+func (r *AWSManagedControlPlaneReconciler) managedClusterToManagedControlPlane(log logr.Logger) handler.MapFunc {
+	return func(o client.Object) []ctrl.Request {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
 
-	awsManagedCluster, ok := o.Object.(*infrav1exp.AWSManagedCluster)
-	if !ok {
-		r.Log.Error(nil, fmt.Sprintf("Expected a AWSManagedCluster but got a %T", o.Object))
-		return nil
-	}
+		awsManagedCluster, ok := o.(*infrav1exp.AWSManagedCluster)
+		if !ok {
+			panic(fmt.Sprintf("Expected a AWSManagedCluster but got a %T", o))
+		}
 
-	if !awsManagedCluster.ObjectMeta.DeletionTimestamp.IsZero() {
-		r.Log.V(4).Info("AWSManagedCluster has a deletion timestamp, skipping mapping")
-		return nil
-	}
+		if !awsManagedCluster.ObjectMeta.DeletionTimestamp.IsZero() {
+			log.V(4).Info("AWSManagedCluster has a deletion timestamp, skipping mapping")
+			return nil
+		}
 
-	cluster, err := util.GetOwnerCluster(ctx, r.Client, awsManagedCluster.ObjectMeta)
-	if err != nil {
-		r.Log.Error(err, "failed to get owning cluster")
-		return nil
-	}
-	if cluster == nil {
-		r.Log.V(4).Info("Owning cluster not set on AWSManagedCluster, skipping mapping")
-		return nil
-	}
+		cluster, err := util.GetOwnerCluster(ctx, r.Client, awsManagedCluster.ObjectMeta)
+		if err != nil {
+			log.Error(err, "failed to get owning cluster")
+			return nil
+		}
+		if cluster == nil {
+			log.V(4).Info("Owning cluster not set on AWSManagedCluster, skipping mapping")
+			return nil
+		}
 
-	controlPlaneRef := cluster.Spec.ControlPlaneRef
-	if controlPlaneRef == nil || controlPlaneRef.Kind != "AWSManagedControlPlane" {
-		r.Log.V(4).Info("ControlPlaneRef is nil or not AWSManagedControlPlane, skipping mapping")
-		return nil
-	}
+		controlPlaneRef := cluster.Spec.ControlPlaneRef
+		if controlPlaneRef == nil || controlPlaneRef.Kind != "AWSManagedControlPlane" {
+			log.V(4).Info("ControlPlaneRef is nil or not AWSManagedControlPlane, skipping mapping")
+			return nil
+		}
 
-	return []ctrl.Request{
-		{
-			NamespacedName: types.NamespacedName{
-				Name:      controlPlaneRef.Name,
-				Namespace: controlPlaneRef.Namespace,
+		return []ctrl.Request{
+			{
+				NamespacedName: types.NamespacedName{
+					Name:      controlPlaneRef.Name,
+					Namespace: controlPlaneRef.Namespace,
+				},
 			},
-		},
+		}
 	}
 }

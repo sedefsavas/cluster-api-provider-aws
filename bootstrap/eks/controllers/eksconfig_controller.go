@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -281,13 +282,14 @@ func (r *EKSConfigReconciler) storeBootstrapData(ctx context.Context, cluster *c
 
 // MachineToBootstrapMapFunc is a handler.ToRequestsFunc to be used to enqueue requests
 // for EKSConfig reconciliation
-func (r *EKSConfigReconciler) MachineToBootstrapMapFunc(o handler.MapObject) []ctrl.Request {
+func (r *EKSConfigReconciler) MachineToBootstrapMapFunc(o client.Object) []ctrl.Request {
 	result := []ctrl.Request{}
 
-	m, ok := o.Object.(*clusterv1.Machine)
+	m, ok := o.(*clusterv1.Machine)
 	if !ok {
-		return nil
+		panic(fmt.Sprintf("Expected a Machine but got a %T", o))
 	}
+
 	if m.Spec.Bootstrap.ConfigRef != nil && m.Spec.Bootstrap.ConfigRef.GroupVersionKind() == bootstrapv1.GroupVersion.WithKind("EKSConfig") {
 		name := client.ObjectKey{Namespace: m.Namespace, Name: m.Spec.Bootstrap.ConfigRef.Name}
 		result = append(result, ctrl.Request{NamespacedName: name})
@@ -297,13 +299,14 @@ func (r *EKSConfigReconciler) MachineToBootstrapMapFunc(o handler.MapObject) []c
 
 // MachinePoolToBootstrapMapFunc is a handler.ToRequestsFunc to be uses to enqueue requests
 // for EKSConfig reconciliation
-func (r *EKSConfigReconciler) MachinePoolToBootstrapMapFunc(o handler.MapObject) []ctrl.Request {
+func (r *EKSConfigReconciler) MachinePoolToBootstrapMapFunc(o client.Object) []ctrl.Request {
 	result := []ctrl.Request{}
 
-	m, ok := o.Object.(*expv1.MachinePool)
+	m, ok := o.(*expv1.MachinePool)
 	if !ok {
-		return nil
+		panic(fmt.Sprintf("Expected a MachinePool but got a %T", o))
 	}
+
 	configRef := m.Spec.Template.Spec.Bootstrap.ConfigRef
 	if configRef != nil && configRef.GroupVersionKind().GroupKind() == bootstrapv1.GroupVersion.WithKind("EKSConfig").GroupKind() {
 		name := client.ObjectKey{Namespace: m.Namespace, Name: configRef.Name}
@@ -315,12 +318,12 @@ func (r *EKSConfigReconciler) MachinePoolToBootstrapMapFunc(o handler.MapObject)
 
 // ClusterToEKSConfigs is a handler.ToRequestsFunc to be used to enqueue requests for
 // EKSConfig reconciliation
-func (r *EKSConfigReconciler) ClusterToEKSConfigs(o handler.MapObject) []ctrl.Request {
+func (r *EKSConfigReconciler) ClusterToEKSConfigs(o client.Object) []ctrl.Request {
 	result := []ctrl.Request{}
 
-	c, ok := o.Object.(*clusterv1.Cluster)
+	c, ok := o.(*clusterv1.Cluster)
 	if !ok {
-		return nil
+		panic(fmt.Sprintf("Expected a Cluster but got a %T", o))
 	}
 
 	selectors := []client.ListOption{
@@ -332,7 +335,6 @@ func (r *EKSConfigReconciler) ClusterToEKSConfigs(o handler.MapObject) []ctrl.Re
 
 	machineList := &clusterv1.MachineList{}
 	if err := r.Client.List(context.Background(), machineList, selectors...); err != nil {
-		r.Log.Error(err, "failed to list Machines for Cluster", "name", c.Name, "namespace", c.Namespace)
 		return nil
 	}
 

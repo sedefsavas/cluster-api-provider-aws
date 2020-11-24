@@ -18,13 +18,21 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"reflect"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/tools/record"
+	infrav1 "sigs.k8s.io/cluster-api-provider-aws/api/v1alpha4"
+	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud/scope"
+	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud/services/ec2"
+	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud/services/elb"
+	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud/services/network"
+	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud/services/securitygroup"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha4"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/conditions"
@@ -37,12 +45,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-	infrav1 "sigs.k8s.io/cluster-api-provider-aws/api/v1alpha4"
-	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud/scope"
-	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud/services/ec2"
-	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud/services/elb"
-	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud/services/network"
-	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud/services/securitygroup"
 )
 
 // AWSClusterReconciler reconciles a AwsCluster object
@@ -229,6 +231,7 @@ func reconcileNormal(clusterScope *scope.ClusterScope) (reconcile.Result, error)
 
 func (r *AWSClusterReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, options controller.Options) error {
 	log := ctrl.LoggerFrom(ctx)
+
 	controller, err := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(options).
 		For(&infrav1.AWSCluster{}).
@@ -262,7 +265,7 @@ func (r *AWSClusterReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Ma
 
 	return controller.Watch(
 		&source.Kind{Type: &clusterv1.Cluster{}},
-		handler.EnqueueRequestsFromMapFunc(r.requeueAWSClusterForUnpausedCluster),
+		handler.EnqueueRequestsFromMapFunc(r.requeueAWSClusterForUnpausedCluster(log)),
 		predicate.Funcs{
 			UpdateFunc: func(e event.UpdateEvent) bool {
 				oldCluster := e.ObjectOld.(*clusterv1.Cluster)
@@ -281,7 +284,7 @@ func (r *AWSClusterReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Ma
 			},
 			CreateFunc: func(e event.CreateEvent) bool {
 				cluster := e.Object.(*clusterv1.Cluster)
-				log := r.Log.WithValues("predicate", "createEvent", "namespace", cluster.Namespace, "cluster", cluster.Name)
+				log := log.WithValues("predicate", "createEvent", "namespace", cluster.Namespace, "cluster", cluster.Name)
 
 				// Only need to trigger a reconcile if the Cluster.Spec.Paused is false
 				if !cluster.Spec.Paused {
@@ -292,12 +295,12 @@ func (r *AWSClusterReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Ma
 				return false
 			},
 			DeleteFunc: func(e event.DeleteEvent) bool {
-				log := r.Log.WithValues("predicate", "deleteEvent", "namespace", e.Meta.GetNamespace(), "cluster", e.Meta.GetName())
+				log := log.WithValues("predicate", "deleteEvent", "namespace", e.Object.GetNamespace(), "cluster", e.Object.GetName())
 				log.V(4).Info("Cluster did not match expected conditions, will not attempt to map associated AWSCluster.")
 				return false
 			},
 			GenericFunc: func(e event.GenericEvent) bool {
-				log := r.Log.WithValues("predicate", "genericEvent", "namespace", e.Meta.GetNamespace(), "cluster", e.Meta.GetName())
+				log := log.WithValues("predicate", "genericEvent", "namespace", e.Object.GetNamespace(), "cluster", e.Object.GetName())
 				log.V(4).Info("Cluster did not match expected conditions, will not attempt to map associated AWSCluster.")
 				return false
 			},
@@ -305,31 +308,37 @@ func (r *AWSClusterReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Ma
 	)
 }
 
-func (r *AWSClusterReconciler) requeueAWSClusterForUnpausedCluster(o handler.MapObject) []ctrl.Request {
-	c := o.Object.(*clusterv1.Cluster)
-	log := r.Log.WithValues("objectMapper", "clusterToAWSCluster", "namespace", c.Namespace, "cluster", c.Name)
+func (r *AWSClusterReconciler) requeueAWSClusterForUnpausedCluster(log logr.Logger) handler.MapFunc {
+	return func(o client.Object) []ctrl.Request {
+		c, ok := o.(*clusterv1.Cluster)
+		if !ok {
+			panic(fmt.Sprintf("Expected a Cluster but got a %T", o))
+		}
 
-	// Don't handle deleted clusters
-	if !c.ObjectMeta.DeletionTimestamp.IsZero() {
-		log.V(4).Info("Cluster has a deletion timestamp, skipping mapping.")
-		return nil
-	}
+		log := log.WithValues("objectMapper", "clusterToAWSCluster", "namespace", c.Namespace, "cluster", c.Name)
 
-	// Make sure the ref is set
-	if c.Spec.InfrastructureRef == nil {
-		log.V(4).Info("Cluster does not have an InfrastructureRef, skipping mapping.")
-		return nil
-	}
+		// Don't handle deleted clusters
+		if !c.ObjectMeta.DeletionTimestamp.IsZero() {
+			log.V(4).Info("Cluster has a deletion timestamp, skipping mapping.")
+			return nil
+		}
 
-	if c.Spec.InfrastructureRef.GroupVersionKind().Kind != "AWSCluster" {
-		log.V(4).Info("Cluster has an InfrastructureRef for a different type, skipping mapping.")
-		return nil
-	}
+		// Make sure the ref is set
+		if c.Spec.InfrastructureRef == nil {
+			log.V(4).Info("Cluster does not have an InfrastructureRef, skipping mapping.")
+			return nil
+		}
 
-	log.V(4).Info("Adding request.", "awsCluster", c.Spec.InfrastructureRef.Name)
-	return []ctrl.Request{
-		{
-			NamespacedName: client.ObjectKey{Namespace: c.Namespace, Name: c.Spec.InfrastructureRef.Name},
-		},
+		if c.Spec.InfrastructureRef.GroupVersionKind().Kind != "AWSCluster" {
+			log.V(4).Info("Cluster has an InfrastructureRef for a different type, skipping mapping.")
+			return nil
+		}
+
+		log.V(4).Info("Adding request.", "awsCluster", c.Spec.InfrastructureRef.Name)
+		return []ctrl.Request{
+			{
+				NamespacedName: client.ObjectKey{Namespace: c.Namespace, Name: c.Spec.InfrastructureRef.Name},
+			},
+		}
 	}
 }

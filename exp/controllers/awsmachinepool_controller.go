@@ -173,7 +173,7 @@ func (r *AWSMachinePoolReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 }
 
-func (r *AWSMachinePoolReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *AWSMachinePoolReconciler) SetupWithManager(_ context.Context, mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&infrav1exp.AWSMachinePool{}).
 		Watches(
@@ -495,11 +495,11 @@ func getMachinePoolByName(ctx context.Context, c client.Client, namespace, name 
 	return m, nil
 }
 
-func machinePoolToInfrastructureMapFunc(gvk schema.GroupVersionKind) handler.ToRequestsFunc {
-	return func(o handler.MapObject) []reconcile.Request {
-		m, ok := o.Object.(*capiv1exp.MachinePool)
+func machinePoolToInfrastructureMapFunc(gvk schema.GroupVersionKind) handler.MapFunc {
+	return func(o client.Object) []reconcile.Request {
+		m, ok := o.(*capiv1exp.MachinePool)
 		if !ok {
-			return nil
+			panic(fmt.Sprintf("Expected a MachinePool but got a %T", o))
 		}
 
 		gk := gvk.GroupKind()

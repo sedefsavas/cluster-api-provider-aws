@@ -208,7 +208,6 @@ func setupReconcilers(ctx context.Context, mgr ctrl.Manager, enableIAM bool, all
 
 	if err := (&controllers.AWSManagedControlPlaneReconciler{
 		Client:               mgr.GetClient(),
-		Log:                  ctrl.Log.WithName("controllers").WithName("AWSManagedControlPlane"),
 		EnableIAM:            enableIAM,
 		AllowAdditionalRoles: allowAddRoles,
 		Endpoints:            serviceEndpoints,

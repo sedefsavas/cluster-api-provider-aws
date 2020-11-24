@@ -27,7 +27,6 @@ import (
 	infrav1 "sigs.k8s.io/cluster-api-provider-aws/api/v1alpha4"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha4"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 )
 
 func setupScheme() (*runtime.Scheme, error) {
@@ -79,28 +78,25 @@ func TestAWSMachineReconciler_AWSClusterToAWSMachines(t *testing.T) {
 		t.Fatal(err)
 	}
 	clusterName := "my-cluster"
-	client := fake.NewFakeClientWithScheme(scheme)
+	cl := fake.NewFakeClientWithScheme(scheme)
 	ctx := context.TODO()
-	client.Create(ctx, newCluster(clusterName))
-	client.Create(ctx, newMachineWithInfrastructureRef(clusterName, "my-machine-0"))
-	client.Create(ctx, newMachineWithInfrastructureRef(clusterName, "my-machine-1"))
-	client.Create(ctx, newMachine(clusterName, "my-machine-2"))
+	cl.Create(ctx, newCluster(clusterName))
+	cl.Create(ctx, newMachineWithInfrastructureRef(clusterName, "my-machine-0"))
+	cl.Create(ctx, newMachineWithInfrastructureRef(clusterName, "my-machine-1"))
+	cl.Create(ctx, newMachine(clusterName, "my-machine-2"))
 
 	reconciler := &AWSMachineReconciler{
-		Client: client,
-		Log:    klogr.New(),
+		Client: cl,
 	}
-	requests := reconciler.AWSClusterToAWSMachines(handler.MapObject{
-		Object: &infrav1.AWSCluster{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      clusterName,
-				Namespace: "default",
-				OwnerReferences: []metav1.OwnerReference{
-					{
-						Name:       clusterName,
-						Kind:       "Cluster",
-						APIVersion: clusterv1.GroupVersion.String(),
-					},
+	requests := reconciler.AWSClusterToAWSMachines(klogr.New())(&infrav1.AWSCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName,
+			Namespace: "default",
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					Name:       clusterName,
+					Kind:       "Cluster",
+					APIVersion: clusterv1.GroupVersion.String(),
 				},
 			},
 		},

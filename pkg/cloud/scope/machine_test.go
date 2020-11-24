@@ -26,6 +26,7 @@ import (
 	"k8s.io/utils/pointer"
 	infrav1 "sigs.k8s.io/cluster-api-provider-aws/api/v1alpha4"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha4"
+	client2 "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -118,7 +119,7 @@ func setupMachineScope() (*MachineScope, error) {
 	awsMachine := newAWSMachine(clusterName, "my-machine-0")
 	awsCluster := newAWSCluster(clusterName)
 
-	initObjects := []runtime.Object{
+	initObjects := []client2.Object{
 		cluster, machine, secret, awsMachine, awsCluster,
 	}
 

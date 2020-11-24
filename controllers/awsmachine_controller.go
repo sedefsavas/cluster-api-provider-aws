@@ -196,6 +196,7 @@ func (r *AWSMachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 func (r *AWSMachineReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, options controller.Options) error {
 	log := ctrl.LoggerFrom(ctx)
 
+	AWSClusterToAWSMachines := r.AWSClusterToAWSMachines(log)
 	controller, err := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(options).
 		For(&infrav1.AWSMachine{}).
@@ -205,7 +206,7 @@ func (r *AWSMachineReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Ma
 		).
 		Watches(
 			&source.Kind{Type: &infrav1.AWSCluster{}},
-			handler.EnqueueRequestsFromMapFunc(r.AWSClusterToAWSMachines),
+			handler.EnqueueRequestsFromMapFunc(AWSClusterToAWSMachines),
 		).
 		WithEventFilter(pausedPredicates(log)).
 		WithEventFilter(
@@ -235,9 +236,10 @@ func (r *AWSMachineReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Ma
 		return err
 	}
 
+	requeueAWSMachinesForUnpausedCluster := r.requeueAWSMachinesForUnpausedCluster(log)
 	return controller.Watch(
 		&source.Kind{Type: &clusterv1.Cluster{}},
-		handler.EnqueueRequestsFromMapFunc(r.requeueAWSMachinesForUnpausedCluster),
+		handler.EnqueueRequestsFromMapFunc(requeueAWSMachinesForUnpausedCluster),
 		predicate.Funcs{
 			UpdateFunc: func(e event.UpdateEvent) bool {
 				oldCluster := e.ObjectOld.(*clusterv1.Cluster)
@@ -696,48 +698,52 @@ func (r *AWSMachineReconciler) reconcileLBAttachment(machineScope *scope.Machine
 
 // AWSClusterToAWSMachines is a handler.ToRequestsFunc to be used to enqeue requests for reconciliation
 // of AWSMachines.
-func (r *AWSMachineReconciler) AWSClusterToAWSMachines(o client.Object) []ctrl.Request {
-	c, ok := o.(*infrav1.AWSCluster)
-	if !ok {
-		panic(fmt.Sprintf("Expected a AWSCluster but got a %T", o))
+func (r *AWSMachineReconciler) AWSClusterToAWSMachines(log logr.Logger) handler.MapFunc {
+	return func(o client.Object) []ctrl.Request {
+		c, ok := o.(*infrav1.AWSCluster)
+		if !ok {
+			panic(fmt.Sprintf("Expected a AWSCluster but got a %T", o))
+		}
+
+		log := log.WithValues("objectMapper", "awsClusterToAWSMachine", "namespace", c.Namespace, "awsCluster", c.Name)
+
+		// Don't handle deleted AWSClusters
+		if !c.ObjectMeta.DeletionTimestamp.IsZero() {
+			log.V(4).Info("AWSCluster has a deletion timestamp, skipping mapping.")
+			return nil
+		}
+
+		cluster, err := util.GetOwnerCluster(context.TODO(), r.Client, c.ObjectMeta)
+		switch {
+		case apierrors.IsNotFound(err) || cluster == nil:
+			log.V(4).Info("Cluster for AWSCluster not found, skipping mapping.")
+			return nil
+		case err != nil:
+			log.Error(err, "Failed to get owning cluster, skipping mapping.")
+			return nil
+		}
+
+		return r.requestsForCluster(log, cluster.Namespace, cluster.Name)
 	}
-
-	log := r.Log.WithValues("objectMapper", "awsClusterToAWSMachine", "namespace", c.Namespace, "awsCluster", c.Name)
-
-	// Don't handle deleted AWSClusters
-	if !c.ObjectMeta.DeletionTimestamp.IsZero() {
-		log.V(4).Info("AWSCluster has a deletion timestamp, skipping mapping.")
-		return nil
-	}
-
-	cluster, err := util.GetOwnerCluster(context.TODO(), r.Client, c.ObjectMeta)
-	switch {
-	case apierrors.IsNotFound(err) || cluster == nil:
-		log.V(4).Info("Cluster for AWSCluster not found, skipping mapping.")
-		return nil
-	case err != nil:
-		log.Error(err, "Failed to get owning cluster, skipping mapping.")
-		return nil
-	}
-
-	return r.requestsForCluster(log, cluster.Namespace, cluster.Name)
 }
 
-func (r *AWSMachineReconciler) requeueAWSMachinesForUnpausedCluster(o client.Object) []ctrl.Request {
-	c, ok := o.(*clusterv1.Cluster)
-	if !ok {
-		panic(fmt.Sprintf("Expected a Cluster but got a %T", o))
+func (r *AWSMachineReconciler) requeueAWSMachinesForUnpausedCluster(log logr.Logger) handler.MapFunc {
+	return func(o client.Object) []ctrl.Request {
+		c, ok := o.(*clusterv1.Cluster)
+		if !ok {
+			panic(fmt.Sprintf("Expected a Cluster but got a %T", o))
+		}
+
+		log := log.WithValues("objectMapper", "clusterToAWSMachine", "namespace", c.Namespace, "cluster", c.Name)
+
+		// Don't handle deleted clusters
+		if !c.ObjectMeta.DeletionTimestamp.IsZero() {
+			log.V(4).Info("Cluster has a deletion timestamp, skipping mapping.")
+			return nil
+		}
+
+		return r.requestsForCluster(log, c.Namespace, c.Name)
 	}
-
-	log := r.Log.WithValues("objectMapper", "clusterToAWSMachine", "namespace", c.Namespace, "cluster", c.Name)
-
-	// Don't handle deleted clusters
-	if !c.ObjectMeta.DeletionTimestamp.IsZero() {
-		log.V(4).Info("Cluster has a deletion timestamp, skipping mapping.")
-		return nil
-	}
-
-	return r.requestsForCluster(log, c.Namespace, c.Name)
 }
 
 func (r *AWSMachineReconciler) requestsForCluster(log logr.Logger, namespace, name string) []ctrl.Request {
