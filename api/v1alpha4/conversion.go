@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright 2020 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,10 +14,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1alpha3
+package v1alpha4
+
+// Hub marks AWSCluster as a conversion hub.
+func (*AWSCluster) Hub() {}
+
+// Hub marks AWSClusterList as a conversion hub.
+func (*AWSClusterList) Hub() {}
 
 // Hub marks AWSMachine as a conversion hub.
 func (*AWSMachine) Hub() {}
 
 // Hub marks AWSMachineList as a conversion hub.
 func (*AWSMachineList) Hub() {}
+
+// Hub marks AWSMachineTemplate as a conversion hub.
+func (*AWSMachineTemplate) Hub() {}
+
+// Hub marks AWSMachineTemplateList as a conversion hub.
+func (*AWSMachineTemplateList) Hub() {}

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1alpha2
+package v1alpha4
 
 import (
 	"reflect"
@@ -80,6 +80,82 @@ func TestTags_Merge(t *testing.T) {
 
 			tags.Merge(tc.other)
 			if e, a := tc.expected, tags; !reflect.DeepEqual(e, a) {
+				t.Errorf("expected %#v, got %#v", e, a)
+			}
+		})
+	}
+}
+
+func TestTags_Difference(t *testing.T) {
+	tests := []struct {
+		name     string
+		self     Tags
+		input    Tags
+		expected Tags
+	}{
+		{
+			name:     "self and input are nil",
+			self:     nil,
+			input:    nil,
+			expected: Tags{},
+		},
+		{
+			name: "input is nil",
+			self: Tags{
+				"a": "b",
+				"c": "d",
+			},
+			input: nil,
+			expected: Tags{
+				"a": "b",
+				"c": "d",
+			},
+		},
+		{
+			name: "similar input",
+			self: Tags{
+				"a": "b",
+				"c": "d",
+			},
+			input: Tags{
+				"a": "b",
+				"c": "d",
+			},
+			expected: Tags{},
+		},
+		{
+			name: "input with extra tags",
+			self: Tags{
+				"a": "b",
+				"c": "d",
+			},
+			input: Tags{
+				"a": "b",
+				"c": "d",
+				"e": "f",
+			},
+			expected: Tags{},
+		},
+		{
+			name: "same keys, different values",
+			self: Tags{
+				"a": "b",
+				"c": "d",
+			},
+			input: Tags{
+				"a": "b1",
+				"c": "d",
+				"e": "f",
+			},
+			expected: Tags{
+				"a": "b",
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			out := tc.self.Difference(tc.input)
+			if e, a := tc.expected, out; !reflect.DeepEqual(e, a) {
 				t.Errorf("expected %#v, got %#v", e, a)
 			}
 		})
