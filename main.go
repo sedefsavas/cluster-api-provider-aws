@@ -124,6 +124,9 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Setup the context that's going to be used in controllers and for the manager.
+	ctx := ctrl.SetupSignalHandler()
+
 	// Initialize event recorder.
 	record.InitFromRecorder(mgr.GetEventRecorderFor("aws-controller"))
 
@@ -142,7 +145,7 @@ func main() {
 			Log:       ctrl.Log.WithName("controllers").WithName("AWSMachine"),
 			Recorder:  mgr.GetEventRecorderFor("awsmachine-controller"),
 			Endpoints: AWSServiceEndpoints,
-		}).SetupWithManager(mgr, controller.Options{MaxConcurrentReconciles: awsMachineConcurrency}); err != nil {
+		}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: awsMachineConcurrency}); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "AWSMachine")
 			os.Exit(1)
 		}
@@ -151,7 +154,7 @@ func main() {
 			Log:       ctrl.Log.WithName("controllers").WithName("AWSCluster"),
 			Recorder:  mgr.GetEventRecorderFor("awscluster-controller"),
 			Endpoints: AWSServiceEndpoints,
-		}).SetupWithManager(mgr, controller.Options{MaxConcurrentReconciles: awsClusterConcurrency}); err != nil {
+		}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: awsClusterConcurrency}); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "AWSCluster")
 			os.Exit(1)
 		}
@@ -167,7 +170,7 @@ func main() {
 				Recorder:  mgr.GetEventRecorderFor("awsmanagedmachinepool-reconciler"),
 				EnableIAM: enableIAM,
 				Endpoints: AWSServiceEndpoints,
-			}).SetupWithManager(mgr, controller.Options{}); err != nil {
+			}).SetupWithManager(ctx, mgr, controller.Options{}); err != nil {
 				setupLog.Error(err, "unable to create controller", "controller", "AWSManagedMachinePool")
 				os.Exit(1)
 			}
@@ -175,7 +178,7 @@ func main() {
 				Client:   mgr.GetClient(),
 				Log:      ctrl.Log.WithName("controllers").WithName("AWSManagedCluster"),
 				Recorder: mgr.GetEventRecorderFor("awsmanagedcluster-reconciler"),
-			}).SetupWithManager(mgr, controller.Options{MaxConcurrentReconciles: awsClusterConcurrency}); err != nil {
+			}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: awsClusterConcurrency}); err != nil {
 				setupLog.Error(err, "unable to create controller", "controller", "AWSManagedCluster")
 			}
 		}
@@ -184,7 +187,7 @@ func main() {
 				Client:   mgr.GetClient(),
 				Log:      ctrl.Log.WithName("controllers").WithName("AWSMachinePool"),
 				Recorder: mgr.GetEventRecorderFor("awsmachinepool-controller"),
-			}).SetupWithManager(mgr); err != nil {
+			}).SetupWithManager(ctx, mgr); err != nil {
 				setupLog.Error(err, "unable to create controller", "controller", "AWSMachinePool")
 				os.Exit(1)
 			}
@@ -243,7 +246,7 @@ func main() {
 	}
 
 	setupLog.Info("starting manager", "version", version.Get().String())
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}

@@ -41,11 +41,10 @@ func TestEKSConfigReconciler_ReturnEarlyIfClusterInfraNotReady(t *testing.T) {
 	testEnv = helpers.NewTestEnvironment()
 
 	reconciler := EKSConfigReconciler{
-		Log:    log.Log,
 		Client: testEnv.Client,
 	}
 
-	result, err := reconciler.joinWorker(context.Background(), log.Log, cluster, config)
+	result, err := reconciler.joinWorker(context.Background(), cluster, config)
 	g.Expect(result).To(Equal(reconcile.Result{}))
 	g.Expect(err).NotTo(HaveOccurred())
 }

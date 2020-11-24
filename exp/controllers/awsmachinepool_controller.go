@@ -23,7 +23,6 @@ import (
 
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/conditions"
-
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -40,10 +39,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	infrav1 "sigs.k8s.io/cluster-api-provider-aws/api/v1alpha3"
-	ekscontrolplane "sigs.k8s.io/cluster-api-provider-aws/controlplane/eks/api/v1alpha3"
-	infrav1exp "sigs.k8s.io/cluster-api-provider-aws/exp/api/v1alpha3"
+	infrav1 "sigs.k8s.io/cluster-api-provider-aws/api/v1alpha4"
+	ekscontrolplane "sigs.k8s.io/cluster-api-provider-aws/controlplane/eks/api/v1alpha4"
+	infrav1exp "sigs.k8s.io/cluster-api-provider-aws/exp/api/v1alpha4"
 	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud"
 	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud/scope"
 	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud/services"
@@ -82,9 +80,8 @@ func (r *AWSMachinePoolReconciler) getEC2Service(scope scope.EC2Scope) services.
 // +kubebuilder:rbac:groups="",resources=secrets;,verbs=get;list;watch
 
 // Reconcile is the reconciliation loop for AWSMachinePool
-func (r *AWSMachinePoolReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result, reterr error) {
-	ctx := context.TODO()
-	logger := r.Log.WithValues("namespace", req.Namespace, "awsMachinePool", req.Name)
+func (r *AWSMachinePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
+	log := ctrl.LoggerFrom(ctx)
 
 	// Fetch the AWSMachinePool .
 	awsMachinePool := &infrav1exp.AWSMachinePool{}
@@ -102,32 +99,32 @@ func (r *AWSMachinePoolReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result, r
 		return reconcile.Result{}, err
 	}
 	if machinePool == nil {
-		logger.Info("MachinePool Controller has not yet set OwnerRef")
+		log.Info("MachinePool Controller has not yet set OwnerRef")
 		return reconcile.Result{}, nil
 	}
-	logger = logger.WithValues("machinePool", machinePool.Name)
+	log = log.WithValues("machinePool", machinePool.Name)
 
 	// Fetch the Cluster.
 	cluster, err := util.GetClusterFromMetadata(ctx, r.Client, machinePool.ObjectMeta)
 	if err != nil {
-		logger.Info("MachinePool is missing cluster label or cluster does not exist")
+		log.Info("MachinePool is missing cluster label or cluster does not exist")
 		return reconcile.Result{}, nil
 	}
 
-	logger = logger.WithValues("cluster", cluster.Name)
+	log = log.WithValues("cluster", cluster.Name)
 
-	infraCluster, err := r.getInfraCluster(ctx, logger, cluster, awsMachinePool)
+	infraCluster, err := r.getInfraCluster(ctx, log, cluster, awsMachinePool)
 	if err != nil {
 		return ctrl.Result{}, errors.New("error getting infra provider cluster or control plane object")
 	}
 	if infraCluster == nil {
-		logger.Info("AWSCluster or AWSManagedControlPlane is not ready yet")
+		log.Info("AWSCluster or AWSManagedControlPlane is not ready yet")
 		return ctrl.Result{}, nil
 	}
 
 	// Create the machine pool scope
 	machinePoolScope, err := scope.NewMachinePoolScope(scope.MachinePoolScopeParams{
-		Logger:         logger,
+		Logger:         log,
 		Client:         r.Client,
 		Cluster:        cluster,
 		MachinePool:    machinePool,
@@ -135,7 +132,7 @@ func (r *AWSMachinePoolReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result, r
 		AWSMachinePool: awsMachinePool,
 	})
 	if err != nil {
-		logger.Error(err, "failed to create scope")
+		log.Error(err, "failed to create scope")
 		return ctrl.Result{}, err
 	}
 
@@ -181,9 +178,7 @@ func (r *AWSMachinePoolReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&infrav1exp.AWSMachinePool{}).
 		Watches(
 			&source.Kind{Type: &capiv1exp.MachinePool{}},
-			&handler.EnqueueRequestsFromMapFunc{
-				ToRequests: machinePoolToInfrastructureMapFunc(infrav1exp.GroupVersion.WithKind("AWSMachinePool")),
-			},
+			handler.EnqueueRequestsFromMapFunc(machinePoolToInfrastructureMapFunc(infrav1exp.GroupVersion.WithKind("AWSMachinePool"))),
 		).
 		Complete(r)
 }
