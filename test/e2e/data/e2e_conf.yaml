@@ -105,7 +105,10 @@ providers:
         targetName: "cluster-template-limit-az.yaml"
       - sourcePath: "./infrastructure-aws/cluster-template-spot-instances.yaml"
         targetName: "cluster-template-spot-instances.yaml"
-
+      - sourcePath: "./infrastructure-aws/cluster-template-mhc.yaml"
+        targetName: "cluster-template-mhc.yaml"
+      - sourcePath: "./infrastructure-aws/cluster-template-machine-pool.yaml"
+        targetName: "cluster-template-machine-pool.yaml"
 variables:
   KUBERNETES_VERSION: "v1.19.4"
   CNI: "../../data/cni/calico.yaml"
@@ -116,6 +119,11 @@ variables:
   CONFORMANCE_CI_ARTIFACTS_KUBERNETES_VERSION: "v1.19.4"
   CONFORMANCE_WORKER_MACHINE_COUNT: "5"
   CONFORMANCE_CONTROL_PLANE_MACHINE_COUNT: "1"
+  ETCD_VERSION_UPGRADE_TO: "3.4.3-0"
+  COREDNS_VERSION_UPGRADE_TO: "1.6.7"
+  KUBERNETES_VERSION_UPGRADE_TO: "v1.19.4"
+  KUBERNETES_VERSION_UPGRADE_FROM: "v1.18.12"
+  EXP_MACHINE_POOL: "true"
 
 intervals:
   default/wait-cluster: ["20m", "10s"]
@@ -125,6 +133,6 @@ intervals:
   conformance/wait-worker-nodes: ["30m", "10s"]
   default/wait-controllers: ["3m", "10s"]
   default/wait-delete-cluster: ["20m", "10s"]
-  default/wait-machine-upgrade: ["20m", "10s"]
+  default/wait-machine-upgrade: ["35m", "10s"]
   default/wait-machine-status: ["20m", "10s"]
   default/wait-infra-subnets: ["5m", "30s"]
