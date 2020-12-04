@@ -63,7 +63,7 @@ func init() {
 }
 
 var (
-	metricsAddr                string
+	metricsBindAddr            string
 	enableLeaderElection       bool
 	watchNamespace             string
 	profilerAddress            string
@@ -79,10 +79,10 @@ var (
 )
 
 func InitFlags(fs *pflag.FlagSet) {
-	fs.StringVar(&metricsAddr, "metrics-addr", ":8080",
+	fs.StringVar(&metricsBindAddr, "metrics-bind-addr", ":8080",
 		"The address the metric endpoint binds to.")
 
-	fs.BoolVar(&enableLeaderElection, "enable-leader-election", false,
+	fs.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
 
 	fs.StringVar(&watchNamespace, "namespace", "",
@@ -156,7 +156,7 @@ func main() {
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
+		MetricsBindAddress:     metricsBindAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "eks-controlplane-manager-leader-election-capa",
 		SyncPeriod:             &syncPeriod,
