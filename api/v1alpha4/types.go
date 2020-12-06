@@ -14,14 +14,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1alpha2
+package v1alpha4
 
 import (
 	"fmt"
 	"sort"
 	"time"
 
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha2"
+	"k8s.io/apimachinery/pkg/util/sets"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha4"
+)
+
+const (
+	// DefaultNameSuffix is the default suffix appended to all AWS IAM roles created by clusterawsadm.
+	DefaultNameSuffix = ".cluster-api-provider-aws.sigs.k8s.io"
 )
 
 // AWSResourceReference is a reference to a specific AWS resource by ID, ARN, or filters.
@@ -119,6 +125,9 @@ type ClassicELB struct {
 	// Scheme is the load balancer scheme, either internet-facing or private.
 	Scheme ClassicELBScheme `json:"scheme,omitempty"`
 
+	// AvailabilityZones is an array of availability zones in the VPC attached to the load balancer.
+	AvailabilityZones []string `json:"availabilityZones,omitempty"`
+
 	// SubnetIDs is an array of subnets in the VPC attached to the load balancer.
 	SubnetIDs []string `json:"subnetIds,omitempty"`
 
@@ -143,6 +152,10 @@ type ClassicELBAttributes struct {
 	// IdleTimeout is time that the connection is allowed to be idle (no data
 	// has been sent over the connection) before it is closed by the load balancer.
 	IdleTimeout time.Duration `json:"idleTimeout,omitempty"`
+
+	// CrossZoneLoadBalancing enables the classic load balancer load balancing.
+	// +optional
+	CrossZoneLoadBalancing bool `json:"crossZoneLoadBalancing,omitempty"`
 }
 
 // ClassicELBListener defines an AWS classic load balancer listener.
@@ -162,6 +175,17 @@ type ClassicELBHealthCheck struct {
 	UnhealthyThreshold int64         `json:"unhealthyThreshold"`
 }
 
+// AZSelectionScheme defines the scheme of selecting AZs.
+type AZSelectionScheme string
+
+var (
+	// AZSelectionSchemeOrdered will select AZs based on alphabetical order
+	AZSelectionSchemeOrdered = AZSelectionScheme("Ordered")
+
+	// AZSelectionSchemeRandom will select AZs randomly
+	AZSelectionSchemeRandom = AZSelectionScheme("Random")
+)
+
 // NetworkSpec encapsulates all things related to AWS network.
 type NetworkSpec struct {
 	// VPC configuration.
@@ -171,15 +195,10 @@ type NetworkSpec struct {
 	// Subnets configuration.
 	// +optional
 	Subnets Subnets `json:"subnets,omitempty"`
-}
 
-// APIEndpoint represents a reachable Kubernetes API endpoint.
-type APIEndpoint struct {
-	// The hostname on which the API server is serving.
-	Host string `json:"host"`
-
-	// The port on which the API server is serving.
-	Port int `json:"port"`
+	// CNI configuration
+	// +optional
+	CNI *CNISpec `json:"cni,omitempty"`
 }
 
 // VPCSpec configures an AWS VPC.
@@ -197,6 +216,23 @@ type VPCSpec struct {
 
 	// Tags is a collection of tags describing the resource.
 	Tags Tags `json:"tags,omitempty"`
+
+	// AvailabilityZoneUsageLimit specifies the maximum number of availability zones (AZ) that
+	// should be used in a region when automatically creating subnets. If a region has more
+	// than this number of AZs then this number of AZs will be picked randomly when creating
+	// default subnets. Defaults to 3
+	// +kubebuilder:default=3
+	// +kubebuilder:validation:Minimum=1
+	AvailabilityZoneUsageLimit *int `json:"availabilityZoneUsageLimit,omitempty"`
+
+	// AvailabilityZoneSelection specifies how AZs should be selected if there are more AZs
+	// in a region than specified by AvailabilityZoneUsageLimit. There are 2 selection schemes:
+	// Ordered - selects based on alphabetical order
+	// Random - selects AZs randomly in a region
+	// Defaults to Ordered
+	// +kubebuilder:default=Ordered
+	// +kubebuilder:validation:Enum=Ordered;Random
+	AvailabilityZoneSelection *AZSelectionScheme `json:"availabilityZoneSelection,omitempty"`
 }
 
 // String returns a string representation of the VPC.
@@ -207,6 +243,11 @@ func (v *VPCSpec) String() string {
 // IsUnmanaged returns true if the VPC is unmanaged.
 func (v *VPCSpec) IsUnmanaged(clusterName string) bool {
 	return v.ID != "" && !v.Tags.HasOwned(clusterName)
+}
+
+// IsManaged returns true if VPC is managed.
+func (v *VPCSpec) IsManaged(clusterName string) bool {
+	return !v.IsUnmanaged(clusterName)
 }
 
 // SubnetSpec configures an AWS Subnet.
@@ -265,6 +306,18 @@ func (s Subnets) FindByID(id string) *SubnetSpec {
 	return nil
 }
 
+// FindEqual returns a subnet spec that is equal to the one passed in.
+// Two subnets are defined equal to each other if their id is equal
+// or if they are in the same vpc and the cidr block is the same.
+func (s Subnets) FindEqual(spec *SubnetSpec) *SubnetSpec {
+	for _, x := range s {
+		if (spec.ID != "" && x.ID == spec.ID) || (spec.CidrBlock == x.CidrBlock) {
+			return x
+		}
+	}
+	return nil
+}
+
 // FilterPrivate returns a slice containing all subnets marked as private.
 func (s Subnets) FilterPrivate() (res Subnets) {
 	for _, x := range s {
@@ -295,6 +348,37 @@ func (s Subnets) FilterByZone(zone string) (res Subnets) {
 	return
 }
 
+// GetUniqueZones returns a slice containing the unique zones of the subnets
+func (s Subnets) GetUniqueZones() []string {
+	keys := make(map[string]bool)
+	zones := []string{}
+	for _, x := range s {
+		if _, value := keys[x.AvailabilityZone]; !value {
+			keys[x.AvailabilityZone] = true
+			zones = append(zones, x.AvailabilityZone)
+		}
+	}
+	return zones
+}
+
+// CNISpec defines configuration for CNI
+type CNISpec struct {
+	// CNIIngressRules specify rules to apply to control plane and worker node security groups.
+	// The source for the rule will be set to control plane and worker security group IDs.
+	CNIIngressRules CNIIngressRules `json:"cniIngressRules,omitempty"`
+}
+
+// CNIIngressRules is a slice of CNIIngressRule
+type CNIIngressRules []*CNIIngressRule
+
+// CNIIngressRule defines an AWS ingress rule for CNI requirements.
+type CNIIngressRule struct {
+	Description string                `json:"description"`
+	Protocol    SecurityGroupProtocol `json:"protocol"`
+	FromPort    int64                 `json:"fromPort"`
+	ToPort      int64                 `json:"toPort"`
+}
+
 // RouteTable defines an AWS routing table.
 type RouteTable struct {
 	ID string `json:"id"`
@@ -310,8 +394,14 @@ var (
 	// SecurityGroupNode defines a Kubernetes workload node role
 	SecurityGroupNode = SecurityGroupRole("node")
 
+	// SecurityGroupEKSNodeAdditional defines an extra node group from eks nodes
+	SecurityGroupEKSNodeAdditional = SecurityGroupRole("node-eks-additional")
+
 	// SecurityGroupControlPlane defines a Kubernetes control plane node role
 	SecurityGroupControlPlane = SecurityGroupRole("controlplane")
+
+	// SecurityGroupAPIServerLB defines a Kubernetes API Server Load Balancer role
+	SecurityGroupAPIServerLB = SecurityGroupRole("apiserver-lb")
 
 	// SecurityGroupLB defines a container for the cloud provider to inject its load balancer ingress rules
 	SecurityGroupLB = SecurityGroupRole("lb")
@@ -475,6 +565,30 @@ var (
 	// InstanceStateStopped is the string representing an instance
 	// that has been stopped and can be restarted
 	InstanceStateStopped = InstanceState("stopped")
+
+	// InstanceRunningStates defines the set of states in which an EC2 instance is
+	// running or going to be running soon
+	InstanceRunningStates = sets.NewString(
+		string(InstanceStatePending),
+		string(InstanceStateRunning),
+	)
+
+	// InstanceOperationalStates defines the set of states in which an EC2 instance is
+	// or can return to running, and supports all EC2 operations
+	InstanceOperationalStates = InstanceRunningStates.Union(
+		sets.NewString(
+			string(InstanceStateStopping),
+			string(InstanceStateStopped),
+		),
+	)
+
+	// InstanceKnownStates represents all known EC2 instance states
+	InstanceKnownStates = InstanceOperationalStates.Union(
+		sets.NewString(
+			string(InstanceStateShuttingDown),
+			string(InstanceStateTerminated),
+		),
+	)
 )
 
 // Instance describes an AWS instance.
@@ -521,12 +635,67 @@ type Instance struct {
 	// Indicates whether the instance is optimized for Amazon EBS I/O.
 	EBSOptimized *bool `json:"ebsOptimized,omitempty"`
 
-	// Specifies size (in Gi) of the root storage device
-	RootDeviceSize int64 `json:"rootDeviceSize,omitempty"`
+	// Configuration options for the root storage volume.
+	// +optional
+	RootVolume *Volume `json:"rootVolume,omitempty"`
+
+	// Configuration options for the non root storage volumes.
+	// +optional
+	NonRootVolumes []*Volume `json:"nonRootVolumes,omitempty"`
 
 	// Specifies ENIs attached to instance
 	NetworkInterfaces []string `json:"networkInterfaces,omitempty"`
 
 	// The tags associated with the instance.
 	Tags map[string]string `json:"tags,omitempty"`
+
+	// Availability zone of instance
+	AvailabilityZone string `json:"availabilityZone,omitempty"`
+
+	// SpotMarketOptions option for configuring instances to be run using AWS Spot instances.
+	SpotMarketOptions *SpotMarketOptions `json:"spotMarketOptions,omitempty"`
+
+	// Tenancy indicates if instance should run on shared or single-tenant hardware.
+	// +optional
+	Tenancy string `json:"tenancy,omitempty"`
+}
+
+// Volume encapsulates the configuration options for the storage device
+type Volume struct {
+	// Device name
+	// +optional
+	DeviceName string `json:"deviceName,omitempty"`
+
+	// Size specifies size (in Gi) of the storage device.
+	// Must be greater than the image snapshot size or 8 (whichever is greater).
+	// +kubebuilder:validation:Minimum=8
+	Size int64 `json:"size"`
+
+	// Type is the type of the volume (e.g. gp2, io1, etc...).
+	// +optional
+	Type string `json:"type,omitempty"`
+
+	// IOPS is the number of IOPS requested for the disk. Not applicable to all types.
+	// +optional
+	IOPS int64 `json:"iops,omitempty"`
+
+	// Encrypted is whether the volume should be encrypted or not.
+	// +optional
+	Encrypted bool `json:"encrypted,omitempty"`
+
+	// EncryptionKey is the KMS key to use to encrypt the volume. Can be either a KMS key ID or ARN.
+	// If Encrypted is set and this is omitted, the default AWS key will be used.
+	// The key must already exist and be accessible by the controller.
+	// +optional
+	EncryptionKey string `json:"encryptionKey,omitempty"`
+}
+
+// SpotMarketOptions defines the options available to a user when configuring
+// Machines to run on Spot instances.
+// Most users should provide an empty struct.
+type SpotMarketOptions struct {
+	// MaxPrice defines the maximum price the user is willing to pay for Spot VM instances
+	// +optional
+	// +kubebuilder:validation:pattern="^[0-9]+(\.[0-9]+)?$"
+	MaxPrice *string `json:"maxPrice,omitempty"`
 }
