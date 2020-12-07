@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -36,11 +37,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha4"
 
-	controlplanev1 "sigs.k8s.io/cluster-api-provider-aws/controlplane/eks/api/v1alpha3"
+	controlplanev1 "sigs.k8s.io/cluster-api-provider-aws/controlplane/eks/api/v1alpha4"
 	"sigs.k8s.io/cluster-api-provider-aws/controlplane/eks/controllers"
-	infrav1exp "sigs.k8s.io/cluster-api-provider-aws/exp/api/v1alpha3"
+	infrav1exp "sigs.k8s.io/cluster-api-provider-aws/exp/api/v1alpha4"
 	"sigs.k8s.io/cluster-api-provider-aws/feature"
 	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud/endpoints"
 	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud/scope"
@@ -174,8 +175,10 @@ func main() {
 	record.InitFromRecorder(mgr.GetEventRecorderFor("aws-controller"))
 
 	setupLog.V(1).Info(fmt.Sprintf("%+v\n", feature.Gates))
+	// Setup the context that's going to be used in controllers and for the manager.
+	ctx := ctrl.SetupSignalHandler()
 
-	setupReconcilers(mgr, enableIAM, allowAddRoles, AWSServiceEndpoints)
+	setupReconcilers(ctx, mgr, enableIAM, allowAddRoles, AWSServiceEndpoints)
 	setupWebhooks(mgr)
 
 	// +kubebuilder:scaffold:builder
@@ -191,24 +194,23 @@ func main() {
 	}
 
 	setupLog.Info("starting manager", "version", version.Get().String())
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
 }
 
-func setupReconcilers(mgr ctrl.Manager, enableIAM bool, allowAddRoles bool, serviceEndpoints []scope.ServiceEndpoint) {
+func setupReconcilers(ctx context.Context, mgr ctrl.Manager, enableIAM bool, allowAddRoles bool, serviceEndpoints []scope.ServiceEndpoint) {
 	if webhookPort != 0 {
 		return
 	}
 
 	if err := (&controllers.AWSManagedControlPlaneReconciler{
 		Client:               mgr.GetClient(),
-		Log:                  ctrl.Log.WithName("controllers").WithName("AWSManagedControlPlane"),
 		EnableIAM:            enableIAM,
 		AllowAdditionalRoles: allowAddRoles,
 		Endpoints:            serviceEndpoints,
-	}).SetupWithManager(mgr, concurrency(eksControlPlaneConcurrency)); err != nil {
+	}).SetupWithManager(ctx, mgr, concurrency(eksControlPlaneConcurrency)); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "AWSManagedControlPlane")
 		os.Exit(1)
 	}

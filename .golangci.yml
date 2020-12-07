@@ -11,11 +11,10 @@ linters:
     - whitespace
     - gocognit
     - gomnd
+    - interfacer
     - godot
-    - gofumpt
-    - gci
-    - nlreturn
-    - gocritic
+    - goerr113
+    - nestif
   # Run with --fast=false for more extensive checks
   fast: true
 issues:

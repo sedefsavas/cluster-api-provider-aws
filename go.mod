@@ -10,6 +10,8 @@ require (
 	github.com/golang/mock v1.4.4
 	github.com/google/goexpect v0.0.0-20200816234442-b5b77125c2c5
 	github.com/google/goterm v0.0.0-20200907032337-555d40f16ae2 // indirect
+	github.com/kr/text v0.2.0 // indirect
+	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
 	github.com/onsi/ginkgo v1.14.1
 	github.com/onsi/gomega v1.10.2
 	github.com/pkg/errors v0.9.1
@@ -18,8 +20,11 @@ require (
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5
+	github.com/stretchr/testify v1.6.1 // indirect
 	golang.org/x/crypto v0.0.0-20200930160638-afb6bcd081ae
 	golang.org/x/net v0.0.0-20200930145003-4acb6c075d10
+	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
+	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	gopkg.in/yaml.v2 v2.3.0
 	k8s.io/api v0.19.2
 	k8s.io/apimachinery v0.19.2

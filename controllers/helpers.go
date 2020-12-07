@@ -30,16 +30,16 @@ import (
 func pausedPredicates(logger logr.Logger) predicate.Funcs {
 	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			return processIfUnpaused(logger.WithValues("predicate", "updateEvent"), e.ObjectNew, e.MetaNew)
+			return processIfUnpaused(logger.WithValues("predicate", "updateEvent"), e.ObjectNew, e.ObjectNew)
 		},
 		CreateFunc: func(e event.CreateEvent) bool {
-			return processIfUnpaused(logger.WithValues("predicate", "createEvent"), e.Object, e.Meta)
+			return processIfUnpaused(logger.WithValues("predicate", "createEvent"), e.Object, e.Object)
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
-			return processIfUnpaused(logger.WithValues("predicate", "deleteEvent"), e.Object, e.Meta)
+			return processIfUnpaused(logger.WithValues("predicate", "deleteEvent"), e.Object, e.Object)
 		},
 		GenericFunc: func(e event.GenericEvent) bool {
-			return processIfUnpaused(logger.WithValues("predicate", "genericEvent"), e.Object, e.Meta)
+			return processIfUnpaused(logger.WithValues("predicate", "genericEvent"), e.Object, e.Object)
 		},
 	}
 }
