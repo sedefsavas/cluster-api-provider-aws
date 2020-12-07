@@ -23,7 +23,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/iam"
 	"github.com/pkg/errors"
-
 	ekscontrolplanev1 "sigs.k8s.io/cluster-api-provider-aws/controlplane/eks/api/v1alpha4"
 	infrav1exp "sigs.k8s.io/cluster-api-provider-aws/exp/api/v1alpha4"
 	eksiam "sigs.k8s.io/cluster-api-provider-aws/pkg/cloud/services/eks/iam"

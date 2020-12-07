@@ -146,9 +146,8 @@ func TestAddRoleMappingCM(t *testing.T) {
 			if tc.expectError {
 				g.Expect(err).ToNot(BeNil())
 				return
-			} else {
-				g.Expect(err).To(BeNil())
 			}
+			g.Expect(err).To(BeNil())
 
 			key := types.NamespacedName{
 				Name:      "aws-auth",
@@ -279,9 +278,8 @@ func TestAddUserMappingCM(t *testing.T) {
 			if tc.expectError {
 				g.Expect(err).ToNot(BeNil())
 				return
-			} else {
-				g.Expect(err).To(BeNil())
 			}
+			g.Expect(err).To(BeNil())
 
 			key := types.NamespacedName{
 				Name:      "aws-auth",

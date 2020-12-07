@@ -136,9 +136,8 @@ func TestAddRoleMappingCRD(t *testing.T) {
 			if tc.expectError {
 				g.Expect(err).ToNot(BeNil())
 				return
-			} else {
-				g.Expect(err).To(BeNil())
 			}
+			g.Expect(err).To(BeNil())
 
 			mappings := &iamauthv1.IAMIdentityMappingList{}
 			err = client.List(context.TODO(), mappings)
@@ -264,9 +263,8 @@ func TestAddUserMappingCRD(t *testing.T) {
 			if tc.expectError {
 				g.Expect(err).ToNot(BeNil())
 				return
-			} else {
-				g.Expect(err).To(BeNil())
 			}
+			g.Expect(err).To(BeNil())
 
 			mappings := &iamauthv1.IAMIdentityMappingList{}
 			err = client.List(context.TODO(), mappings)

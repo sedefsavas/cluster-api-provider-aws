@@ -246,24 +246,24 @@ func TestAWSMachine_Default(t *testing.T) {
 		},
 	}
 
-	tests := []struct{
-		name string
-		cloudInit CloudInit
+	tests := []struct {
+		name                   string
+		cloudInit              CloudInit
 		expectedSecretsBackend string
-	} {
+	}{
 		{
-			name: "with insecure skip secrets manager unset",
-			cloudInit: CloudInit{InsecureSkipSecretsManager: false},
+			name:                   "with insecure skip secrets manager unset",
+			cloudInit:              CloudInit{InsecureSkipSecretsManager: false},
 			expectedSecretsBackend: "secrets-manager",
 		},
 		{
-			name: "with insecure skip secrets manager unset and secrets backend set",
-			cloudInit: CloudInit{InsecureSkipSecretsManager: false, SecureSecretsBackend: "ssm-parameter-store"},
+			name:                   "with insecure skip secrets manager unset and secrets backend set",
+			cloudInit:              CloudInit{InsecureSkipSecretsManager: false, SecureSecretsBackend: "ssm-parameter-store"},
 			expectedSecretsBackend: "ssm-parameter-store",
 		},
 		{
-			name: "with insecure skip secrets manager set",
-			cloudInit: CloudInit{InsecureSkipSecretsManager: true},
+			name:                   "with insecure skip secrets manager set",
+			cloudInit:              CloudInit{InsecureSkipSecretsManager: true},
 			expectedSecretsBackend: "",
 		},
 	}

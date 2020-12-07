@@ -70,8 +70,7 @@ func (r *AWSManagedControlPlaneReconciler) SetupWithManager(ctx context.Context,
 		Watches(
 			&source.Kind{Type: &infrav1exp.AWSManagedCluster{}},
 			handler.EnqueueRequestsFromMapFunc(r.managedClusterToManagedControlPlane(log)),
-		).
-		Build(r)
+		).Build(r)
 
 	if err != nil {
 		return fmt.Errorf("failed setting up the AWSManagedControlPlane controller manager: %w", err)

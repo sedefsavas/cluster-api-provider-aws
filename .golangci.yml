@@ -15,6 +15,13 @@ linters:
     - godot
     - goerr113
     - nestif
+    - wrapcheck
+    - nlreturn
+    - exhaustivestruct
+    - gofumpt
+    - gci
+    - errorlint
+    - gocritic
   # Run with --fast=false for more extensive checks
   fast: true
 issues:
@@ -28,5 +35,6 @@ run:
   timeout: 10m
   tests: false
   skip-files:
-    - "zz_generated.*\\.go$"
     - ".*_mock\\.go"
+    - "zz_generated.*\\.go$"
+    - ".*conversion.*\\.go$"

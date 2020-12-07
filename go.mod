@@ -17,15 +17,18 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.7.1
 	github.com/sergi/go-diff v1.1.0
-	github.com/spf13/cobra v1.0.0
+	github.com/spf13/cobra v1.1.1
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5
+	github.com/spf13/viper v1.7.1 // indirect
 	github.com/stretchr/testify v1.6.1 // indirect
 	golang.org/x/crypto v0.0.0-20200930160638-afb6bcd081ae
 	golang.org/x/net v0.0.0-20200930145003-4acb6c075d10
-	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
+	golang.org/x/sys v0.0.0-20201009025420-dfb3f7c4e634 // indirect
+	golang.org/x/tools v0.0.0-20201013201025-64a9e34f3752 // indirect
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	gopkg.in/yaml.v2 v2.3.0
+	honnef.co/go/tools v0.0.1-2020.1.6 // indirect
 	k8s.io/api v0.19.2
 	k8s.io/apimachinery v0.19.2
 	k8s.io/client-go v0.19.2

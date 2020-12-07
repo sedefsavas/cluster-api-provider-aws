@@ -20,7 +20,6 @@ import (
 	"fmt"
 
 	"github.com/aws/aws-sdk-go/service/eks"
-
 	infrav1 "sigs.k8s.io/cluster-api-provider-aws/api/v1alpha4"
 )
 

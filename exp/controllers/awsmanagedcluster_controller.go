@@ -110,7 +110,6 @@ func (r *AWSManagedClusterReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	log.Info("Successfully reconciled AWSManagedCluster")
 
 	return reconcile.Result{}, nil
-
 }
 
 func (r *AWSManagedClusterReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, options controller.Options) error {

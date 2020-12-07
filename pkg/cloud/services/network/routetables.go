@@ -223,11 +223,7 @@ func (s *Service) describeVpcRouteTables() ([]*ec2.RouteTable, error) {
 }
 
 func (s *Service) createRouteTableWithRoutes(routes []*ec2.Route, isPublic bool, zone string) (*infrav1.RouteTable, error) {
-	out, err := s.EC2Client.CreateRouteTable(&ec2.CreateRouteTableInput{
-		VpcId: aws.String(s.scope.VPC().ID),
-		TagSpecifications: []*ec2.TagSpecification{
-			tags.BuildParamsToTagSpecification(ec2.ResourceTypeRouteTable, s.getRouteTableTagParams(services.TemporaryResourceID, isPublic, zone))},
-	})
+	out, err := s.EC2Client.CreateRouteTable(&ec2.CreateRouteTableInput{VpcId: aws.String(s.scope.VPC().ID), TagSpecifications: []*ec2.TagSpecification{tags.BuildParamsToTagSpecification(ec2.ResourceTypeRouteTable, s.getRouteTableTagParams(services.TemporaryResourceID, isPublic, zone))}})
 	if err != nil {
 		record.Warnf(s.scope.InfraCluster(), "FailedCreateRouteTable", "Failed to create managed RouteTable: %v", err)
 		return nil, errors.Wrapf(err, "failed to create route table in vpc %q", s.scope.VPC().ID)

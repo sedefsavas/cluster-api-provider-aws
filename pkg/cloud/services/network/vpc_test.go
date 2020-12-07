@@ -201,7 +201,7 @@ func TestReconcileVPC(t *testing.T) {
 			_ = infrav1.AddToScheme(scheme)
 			awsCluster := &infrav1.AWSCluster{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:                       "test-cluster",
+					Name: "test-cluster",
 				},
 				Spec: infrav1.AWSClusterSpec{
 					NetworkSpec: infrav1.NetworkSpec{

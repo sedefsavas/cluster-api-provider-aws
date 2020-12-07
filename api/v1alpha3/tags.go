@@ -18,8 +18,9 @@ package v1alpha3
 
 import (
 	"fmt"
-	"k8s.io/apimachinery/pkg/types"
 	"reflect"
+
+	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
 )
 

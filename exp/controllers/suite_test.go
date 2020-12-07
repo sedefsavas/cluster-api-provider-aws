@@ -31,7 +31,6 @@ import (
 	infrav1exp "sigs.k8s.io/cluster-api-provider-aws/exp/api/v1alpha4"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha4"
 	clusterv1exp "sigs.k8s.io/cluster-api/exp/api/v1alpha4"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
@@ -46,7 +45,6 @@ var (
 	cfg       *rest.Config
 	k8sClient client.Client
 	testEnv   *envtest.Environment
-	ctx       = ctrl.SetupSignalHandler()
 )
 
 func init() {
