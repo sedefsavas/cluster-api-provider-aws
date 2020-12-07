@@ -24,8 +24,8 @@ import (
 
 	awsclient "github.com/aws/aws-sdk-go/aws/client"
 
-	infrav1 "sigs.k8s.io/cluster-api-provider-aws/api/v1alpha3"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
+	infrav1 "sigs.k8s.io/cluster-api-provider-aws/api/v1alpha4"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha4"
 )
 
 // Session represents an AWS session

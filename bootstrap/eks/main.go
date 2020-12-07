@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
 	"math/rand"
 	"net/http"
@@ -29,18 +30,16 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/klog"
 	"k8s.io/klog/klogr"
+	bootstrapv1 "sigs.k8s.io/cluster-api-provider-aws/bootstrap/eks/api/v1alpha4"
+	bootstrapv1controllers "sigs.k8s.io/cluster-api-provider-aws/bootstrap/eks/controllers"
+	controlplanev1 "sigs.k8s.io/cluster-api-provider-aws/controlplane/eks/api/v1alpha4"
+	expinfrav1 "sigs.k8s.io/cluster-api-provider-aws/exp/api/v1alpha4"
+	"sigs.k8s.io/cluster-api-provider-aws/version"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha4"
+	expclusterv1 "sigs.k8s.io/cluster-api/exp/api/v1alpha4"
 	"sigs.k8s.io/cluster-api/feature"
-	"sigs.k8s.io/cluster-api/util"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-
-	bootstrapv1 "sigs.k8s.io/cluster-api-provider-aws/bootstrap/eks/api/v1alpha3"
-	bootstrapv1controllers "sigs.k8s.io/cluster-api-provider-aws/bootstrap/eks/controllers"
-	controlplanev1 "sigs.k8s.io/cluster-api-provider-aws/controlplane/eks/api/v1alpha3"
-	expinfrav1 "sigs.k8s.io/cluster-api-provider-aws/exp/api/v1alpha3"
-	"sigs.k8s.io/cluster-api-provider-aws/version"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
-	expclusterv1 "sigs.k8s.io/cluster-api/exp/api/v1alpha3"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -134,15 +133,19 @@ func main() {
 		RetryPeriod:        &leaderElectionRetryPeriod,
 		Namespace:          watchNamespace,
 		SyncPeriod:         &syncPeriod,
-		NewClient:          util.ManagerDelegatingClientFunc,
-		Port:               webhookPort,
+		// TODO: IMPORTANT: Is this correct????
+		// NewClient:          util.ManagerDelegatingClientFunc,
+		Port: webhookPort,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
 
-	setupReconcilers(mgr)
+	// Setup the context that's going to be used in controllers and for the manager.
+	ctx := ctrl.SetupSignalHandler()
+
+	setupReconcilers(ctx, mgr)
 
 	// +kubebuilder:scaffold:builder
 	setupLog.Info("starting manager", "version", version.Get().String())
@@ -152,15 +155,14 @@ func main() {
 	}
 }
 
-func setupReconcilers(mgr ctrl.Manager) {
+func setupReconcilers(ctx context.Context, mgr ctrl.Manager) {
 	if webhookPort != 0 {
 		return
 	}
 
 	if err := (&bootstrapv1controllers.EKSConfigReconciler{
 		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("EKSConfig"),
-	}).SetupWithManager(mgr, concurrency(eksConfigConcurrency)); err != nil {
+	}).SetupWithManager(ctx, mgr, concurrency(eksConfigConcurrency)); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "EKSConfig")
 		os.Exit(1)
 	}

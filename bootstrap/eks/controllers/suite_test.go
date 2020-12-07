@@ -21,7 +21,9 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
 	"sigs.k8s.io/cluster-api/test/helpers"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
 	// +kubebuilder:scaffold:imports
 )
@@ -29,7 +31,10 @@ import (
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
-var testEnv *helpers.TestEnvironment
+var (
+	testEnv *helpers.TestEnvironment
+	ctx     = ctrl.SetupSignalHandler()
+)
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -46,7 +51,7 @@ var _ = BeforeSuite(func(done Done) {
 	By("starting the manager")
 	go func() {
 		defer GinkgoRecover()
-		Expect(testEnv.StartManager()).To(Succeed())
+		Expect(testEnv.StartManager(ctx)).To(Succeed())
 	}()
 
 	close(done)

@@ -24,10 +24,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/klogr"
-	infrav1 "sigs.k8s.io/cluster-api-provider-aws/api/v1alpha3"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
+	infrav1 "sigs.k8s.io/cluster-api-provider-aws/api/v1alpha4"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha4"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 )
 
 func setupScheme() (*runtime.Scheme, error) {
@@ -88,19 +87,17 @@ func TestAWSMachineReconciler_AWSClusterToAWSMachines(t *testing.T) {
 
 	reconciler := &AWSMachineReconciler{
 		Client: client,
-		Log:    klogr.New(),
 	}
-	requests := reconciler.AWSClusterToAWSMachines(handler.MapObject{
-		Object: &infrav1.AWSCluster{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      clusterName,
-				Namespace: "default",
-				OwnerReferences: []metav1.OwnerReference{
-					{
-						Name:       clusterName,
-						Kind:       "Cluster",
-						APIVersion: clusterv1.GroupVersion.String(),
-					},
+
+	requests := reconciler.AWSClusterToAWSMachines(klogr.New())(&infrav1.AWSCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName,
+			Namespace: "default",
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					Name:       clusterName,
+					Kind:       "Cluster",
+					APIVersion: clusterv1.GroupVersion.String(),
 				},
 			},
 		},

@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/conditions"
 
@@ -32,8 +31,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/cluster-api-provider-aws/controllers"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
-	capiv1exp "sigs.k8s.io/cluster-api/exp/api/v1alpha3"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha4"
+	capiv1exp "sigs.k8s.io/cluster-api/exp/api/v1alpha4"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -41,9 +40,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	infrav1 "sigs.k8s.io/cluster-api-provider-aws/api/v1alpha3"
-	ekscontrolplane "sigs.k8s.io/cluster-api-provider-aws/controlplane/eks/api/v1alpha3"
-	infrav1exp "sigs.k8s.io/cluster-api-provider-aws/exp/api/v1alpha3"
+	infrav1 "sigs.k8s.io/cluster-api-provider-aws/api/v1alpha4"
+	ekscontrolplane "sigs.k8s.io/cluster-api-provider-aws/controlplane/eks/api/v1alpha4"
+	infrav1exp "sigs.k8s.io/cluster-api-provider-aws/exp/api/v1alpha4"
 	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud"
 	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud/scope"
 	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud/services"
@@ -82,9 +81,8 @@ func (r *AWSMachinePoolReconciler) getEC2Service(scope scope.EC2Scope) services.
 // +kubebuilder:rbac:groups="",resources=secrets;,verbs=get;list;watch
 
 // Reconcile is the reconciliation loop for AWSMachinePool
-func (r *AWSMachinePoolReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result, reterr error) {
-	ctx := context.TODO()
-	logger := r.Log.WithValues("namespace", req.Namespace, "awsMachinePool", req.Name)
+func (r *AWSMachinePoolReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
+	log := ctrl.LoggerFrom(ctx)
 
 	// Fetch the AWSMachinePool .
 	awsMachinePool := &infrav1exp.AWSMachinePool{}
@@ -102,32 +100,32 @@ func (r *AWSMachinePoolReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result, r
 		return reconcile.Result{}, err
 	}
 	if machinePool == nil {
-		logger.Info("MachinePool Controller has not yet set OwnerRef")
+		log.Info("MachinePool Controller has not yet set OwnerRef")
 		return reconcile.Result{}, nil
 	}
-	logger = logger.WithValues("machinePool", machinePool.Name)
+	log = log.WithValues("machinePool", machinePool.Name)
 
 	// Fetch the Cluster.
 	cluster, err := util.GetClusterFromMetadata(ctx, r.Client, machinePool.ObjectMeta)
 	if err != nil {
-		logger.Info("MachinePool is missing cluster label or cluster does not exist")
+		log.Info("MachinePool is missing cluster label or cluster does not exist")
 		return reconcile.Result{}, nil
 	}
 
-	logger = logger.WithValues("cluster", cluster.Name)
+	log = log.WithValues("cluster", cluster.Name)
 
-	infraCluster, err := r.getInfraCluster(ctx, logger, cluster, awsMachinePool)
+	infraCluster, err := r.getInfraCluster(ctx, log, cluster, awsMachinePool)
 	if err != nil {
 		return ctrl.Result{}, errors.New("error getting infra provider cluster or control plane object")
 	}
 	if infraCluster == nil {
-		logger.Info("AWSCluster or AWSManagedControlPlane is not ready yet")
+		log.Info("AWSCluster or AWSManagedControlPlane is not ready yet")
 		return ctrl.Result{}, nil
 	}
 
 	// Create the machine pool scope
 	machinePoolScope, err := scope.NewMachinePoolScope(scope.MachinePoolScopeParams{
-		Logger:         logger,
+		Logger:         log,
 		Client:         r.Client,
 		Cluster:        cluster,
 		MachinePool:    machinePool,
@@ -135,7 +133,7 @@ func (r *AWSMachinePoolReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result, r
 		AWSMachinePool: awsMachinePool,
 	})
 	if err != nil {
-		logger.Error(err, "failed to create scope")
+		log.Error(err, "failed to create scope")
 		return ctrl.Result{}, err
 	}
 
@@ -176,14 +174,12 @@ func (r *AWSMachinePoolReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result, r
 	}
 }
 
-func (r *AWSMachinePoolReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *AWSMachinePoolReconciler) SetupWithManager(_ context.Context, mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&infrav1exp.AWSMachinePool{}).
 		Watches(
 			&source.Kind{Type: &capiv1exp.MachinePool{}},
-			&handler.EnqueueRequestsFromMapFunc{
-				ToRequests: machinePoolToInfrastructureMapFunc(infrav1exp.GroupVersion.WithKind("AWSMachinePool")),
-			},
+			handler.EnqueueRequestsFromMapFunc(machinePoolToInfrastructureMapFunc(infrav1exp.GroupVersion.WithKind("AWSMachinePool"))),
 		).
 		Complete(r)
 }
@@ -500,11 +496,11 @@ func getMachinePoolByName(ctx context.Context, c client.Client, namespace, name 
 	return m, nil
 }
 
-func machinePoolToInfrastructureMapFunc(gvk schema.GroupVersionKind) handler.ToRequestsFunc {
-	return func(o handler.MapObject) []reconcile.Request {
-		m, ok := o.Object.(*capiv1exp.MachinePool)
+func machinePoolToInfrastructureMapFunc(gvk schema.GroupVersionKind) handler.MapFunc {
+	return func(o client.Object) []reconcile.Request {
+		m, ok := o.(*capiv1exp.MachinePool)
 		if !ok {
-			return nil
+			panic(fmt.Sprintf("Expected a MachinePool but got a %T", o))
 		}
 
 		gk := gvk.GroupKind()
