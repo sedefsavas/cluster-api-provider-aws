@@ -90,7 +90,7 @@ var _ = Describe("conformance tests", func() {
 		b.RecordValue("cluster creation", runtime.Seconds())
 		workloadProxy := e2eCtx.Environment.BootstrapClusterProxy.GetWorkloadCluster(ctx, namespace.Name, name)
 		runtime = b.Time("conformance suite", func() {
-			kubetest.Run(
+			kubetest.Run(ctx,
 				kubetest.RunInput{
 					ClusterProxy:   workloadProxy,
 					NumberOfNodes:  int(workerMachineCount),
