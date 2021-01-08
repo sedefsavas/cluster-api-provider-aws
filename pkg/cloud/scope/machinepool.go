@@ -27,6 +27,7 @@ import (
 	"k8s.io/utils/pointer"
 	infrav1 "sigs.k8s.io/cluster-api-provider-aws/api/v1alpha3"
 	expinfrav1 "sigs.k8s.io/cluster-api-provider-aws/exp/api/v1alpha3"
+	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud/throttle"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
 	capierrors "sigs.k8s.io/cluster-api/errors"
 	expclusterv1 "sigs.k8s.io/cluster-api/exp/api/v1alpha3"
@@ -63,6 +64,11 @@ func (m *MachinePoolScope) GetProviderID() string {
 		return m.AWSMachinePool.Spec.ProviderID
 	}
 	return ""
+}
+
+// ServiceLimiter returns the AWS SDK session. Used for creating clients. No-op here
+func (s *MachinePoolScope) ServiceLimiter(service string) *throttle.ServiceLimiter {
+	return nil
 }
 
 // NewMachinePoolScope creates a new MachinePoolScope from the supplied parameters.

@@ -60,9 +60,13 @@ func NewASGClient(scopeUser cloud.ScopeUsage, session cloud.Session, target runt
 func NewEC2Client(scopeUser cloud.ScopeUsage, session cloud.Session, target runtime.Object) ec2iface.EC2API {
 	ec2Client := ec2.New(session.Session())
 	ec2Client.Handlers.Build.PushFrontNamed(getUserAgentHandler())
-	ec2Client.Handlers.Sign.PushFront(session.ServiceLimiter(ec2.ServiceID).LimitRequest)
+	if session.ServiceLimiter(ec2.ServiceID) != nil{
+		ec2Client.Handlers.Sign.PushFront(session.ServiceLimiter(ec2.ServiceID).LimitRequest)
+	}
 	ec2Client.Handlers.CompleteAttempt.PushFront(awsmetrics.CaptureRequestMetrics(scopeUser.ControllerName()))
-	ec2Client.Handlers.CompleteAttempt.PushFront(session.ServiceLimiter(ec2.ServiceID).ReviewResponse)
+	if session.ServiceLimiter(ec2.ServiceID) != nil {
+		ec2Client.Handlers.CompleteAttempt.PushFront(session.ServiceLimiter(ec2.ServiceID).ReviewResponse)
+	}
 	ec2Client.Handlers.Complete.PushBack(recordAWSPermissionsIssue(target))
 
 	return ec2Client

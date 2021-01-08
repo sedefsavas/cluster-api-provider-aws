@@ -23,6 +23,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	"k8s.io/klog/klogr"
+	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud/throttle"
 
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
 	clusterv1exp "sigs.k8s.io/cluster-api/exp/api/v1alpha3"
@@ -64,7 +65,7 @@ func NewManagedMachinePoolScope(params ManagedMachinePoolScopeParams) (*ManagedM
 		params.Logger = klogr.New()
 	}
 
-	session, err := sessionForRegion(params.ControlPlane.Spec.Region, params.Endpoints)
+	session, _, err := sessionForRegion(params.ControlPlane.Spec.Region, params.Endpoints)
 	if err != nil {
 		return nil, errors.Errorf("failed to create aws session: %v", err)
 	}
@@ -108,6 +109,11 @@ type ManagedMachinePoolScope struct {
 // ManagedPoolName returns the managed machine pool name.
 func (s *ManagedMachinePoolScope) ManagedPoolName() string {
 	return s.ManagedMachinePool.Name
+}
+
+// ServiceLimiter returns the AWS SDK session. Used for creating clients. No-op here
+func (s *ManagedMachinePoolScope) ServiceLimiter(service string) *throttle.ServiceLimiter {
+	return nil
 }
 
 // ClusterName returns the cluster name.
