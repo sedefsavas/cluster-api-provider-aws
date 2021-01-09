@@ -71,7 +71,6 @@ apiVersion: exp.cluster.x-k8s.io/v1alpha3
 kind: MachinePool
 metadata:
   name: ${CLUSTER_NAME}-mp-0
-  namespace: default
 spec:
   clusterName: ${CLUSTER_NAME}
   replicas: ${WORKER_MACHINE_COUNT}
@@ -93,10 +92,9 @@ apiVersion: infrastructure.cluster.x-k8s.io/v1alpha3
 kind: AWSMachinePool
 metadata:
   name: ${CLUSTER_NAME}-mp-0
-  namespace: default
 spec:
   minSize: 1
-  maxSize: 3
+  maxSize: 4
   awsLaunchTemplate:
     instanceType: "${AWS_CONTROL_PLANE_MACHINE_TYPE}"
     iamInstanceProfile: "nodes.cluster-api-provider-aws.sigs.k8s.io"
