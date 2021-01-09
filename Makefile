@@ -113,6 +113,9 @@ test: ## Run tests
 test-e2e: $(GINKGO) $(KIND) $(SSM_PLUGIN) $(KUSTOMIZE) e2e-image ## Run e2e tests
 	time $(GINKGO) -trace -progress -v -tags=e2e -focus=$(E2E_UNMANAGED_FOCUS) $(GINKGO_ARGS) ./test/e2e/suites/unmanaged/... -- -config-path="$(E2E_CONF_PATH)" -artifacts-folder="$(ARTIFACTS)" --data-folder="$(E2E_DATA_DIR)" $(E2E_ARGS)
 
+test-scale:  e2e-image
+	time $(GINKGO) -trace -progress -v -tags=e2e -focus="scale" $(GINKGO_ARGS) ./test/e2e/suites/unmanaged/... -- -config-path="$(E2E_CONF_PATH)" -artifacts-folder="$(ARTIFACTS)" --data-folder="$(E2E_DATA_DIR)"
+
 .PHONY: test-e2e-eks ## Run EKS e2e tests using clusterctl
 test-e2e-eks: $(GINKGO) $(KIND) $(SSM_PLUGIN) $(KUSTOMIZE) e2e-image ## Run eks e2e tests
 	time $(GINKGO) -trace -progress -v -tags=e2e $(GINKGO_ARGS) ./test/e2e/suites/managed/... -- -config-path="$(E2E_EKS_CONF_PATH)" -artifacts-folder="$(ARTIFACTS)" --data-folder="$(E2E_DATA_DIR)" --source-template="eks/cluster-template-eks-control-plane-only.yaml" --skip-eks-upgrade-tests $(E2E_ARGS)
@@ -121,8 +124,7 @@ test-e2e-eks: $(GINKGO) $(KIND) $(SSM_PLUGIN) $(KUSTOMIZE) e2e-image ## Run eks 
 e2e-image:
 ifndef FASTBUILD
 	docker build -f Dockerfile --tag="gcr.io/k8s-staging-cluster-api/capa-manager:e2e" .
-	docker build -f Dockerfile --tag="gcr.io/k8s-staging-cluster-api/capa-eks-boostrap-manager:e2e" --build-arg package=./bootstrap/eks  .
-	docker build -f Dockerfile --tag="gcr.io/k8s-staging-cluster-api/capa-eks-controlplane-manager:e2e" --build-arg package=./controlplane/eks  .
+
 else
 	$(MAKE) managers
 	docker build -f Dockerfile.fastbuild --tag="gcr.io/k8s-staging-cluster-api/capa-manager:e2e" --build-arg managerbin=manager .
@@ -137,7 +139,6 @@ CONFORMANCE_GINKGO_ARGS += $(GINKGO_ARGS)
 .PHONY: test-conformance
 test-conformance: $(GINKGO) $(KIND) $(SSM_PLUGIN) $(KUSTOMIZE) e2e-image ## Run clusterctl based conformance test on workload cluster (requires Docker).
 	time $(GINKGO) -trace -progress -v -tags=e2e -focus="conformance" $(CONFORMANCE_GINKGO_ARGS) ./test/e2e/suites/conformance/... -- -config-path="$(E2E_CONF_PATH)" -artifacts-folder="$(ARTIFACTS)" --data-folder="$(E2E_DATA_DIR)" $(CONFORMANCE_E2E_ARGS)
-
 
 test-conformance-fast: ## Run clusterctl based conformance test on workload cluster (requires Docker) using a subset of the conformance suite in parallel. Run with FASTBUILD=true to skip full CAPA rebuild.
 	$(MAKE) test-conformance CONFORMANCE_E2E_ARGS="-kubetest.config-file=$(KUBETEST_FAST_CONF_PATH) -kubetest.ginkgo-nodes=5 $(E2E_ARGS)"
