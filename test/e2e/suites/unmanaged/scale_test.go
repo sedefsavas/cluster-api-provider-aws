@@ -75,7 +75,7 @@ var _ = Describe("scale tests", func() {
 			ClusterName:              clusterName,
 			KubernetesVersion:        e2eCtx.E2EConfig.GetVariable(shared.KubernetesVersion),
 			ControlPlaneMachineCount: pointer.Int64Ptr(1),
-			WorkerMachineCount:       pointer.Int64Ptr(0),
+			WorkerMachineCount:       pointer.Int64Ptr(1),
 		}
 
 		createCluster(ctx, workloadClusterConfigInput)
