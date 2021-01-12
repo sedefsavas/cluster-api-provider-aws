@@ -65,8 +65,8 @@ var _ = Describe("scale tests", func() {
 	It("should complete a scale test", func() {
 		By("Creating initial cluster")
 		clusterName := fmt.Sprintf("cluster-%s", util.RandomString(6))
-		workloadClusterConfigInput :=  clusterctl.ConfigClusterInput{
-			LogFolder:                filepath.Join(e2eCtx.Settings.ArtifactFolder, "clusters", e2eCtx.Environment.BootstrapClusterProxy.GetName()),
+		workloadClusterTemplate := clusterctl.ConfigCluster(ctx, clusterctl.ConfigClusterInput{
+			LogFolder:                 filepath.Join(e2eCtx.Settings.ArtifactFolder, "clusters", e2eCtx.Environment.BootstrapClusterProxy.GetName()),
 			ClusterctlConfigPath:     e2eCtx.Environment.ClusterctlConfigPath,
 			KubeconfigPath:           e2eCtx.Environment.BootstrapClusterProxy.GetKubeconfigPath(),
 			InfrastructureProvider:   clusterctl.DefaultInfrastructureProvider,
@@ -76,9 +76,8 @@ var _ = Describe("scale tests", func() {
 			KubernetesVersion:        e2eCtx.E2EConfig.GetVariable(shared.KubernetesVersion),
 			ControlPlaneMachineCount: pointer.Int64Ptr(1),
 			WorkerMachineCount:       pointer.Int64Ptr(1),
-		}
-
-		createCluster(ctx, workloadClusterConfigInput)
+		})
+		Expect(e2eCtx.Environment.BootstrapClusterProxy.Apply(ctx, workloadClusterTemplate)).ShouldNot(HaveOccurred())
 
 		By("Waiting for initial cluster to reach infrastructure ready")
 		Eventually(func() bool {
@@ -90,6 +89,33 @@ var _ = Describe("scale tests", func() {
 			}
 			return false
 		}, e2eCtx.E2EConfig.GetIntervals("", "wait-cluster")...).Should(Equal(true))
+
+		//clusterName := fmt.Sprintf("cluster-%s", util.RandomString(6))
+		//workloadClusterConfigInput :=  clusterctl.ConfigClusterInput{
+		//	LogFolder:                filepath.Join(e2eCtx.Settings.ArtifactFolder, "clusters", e2eCtx.Environment.BootstrapClusterProxy.GetName()),
+		//	ClusterctlConfigPath:     e2eCtx.Environment.ClusterctlConfigPath,
+		//	KubeconfigPath:           e2eCtx.Environment.BootstrapClusterProxy.GetKubeconfigPath(),
+		//	InfrastructureProvider:   clusterctl.DefaultInfrastructureProvider,
+		//	Flavor:                   clusterctl.DefaultFlavor,
+		//	Namespace:                namespace.Name,
+		//	ClusterName:              clusterName,
+		//	KubernetesVersion:        e2eCtx.E2EConfig.GetVariable(shared.KubernetesVersion),
+		//	ControlPlaneMachineCount: pointer.Int64Ptr(1),
+		//	WorkerMachineCount:       pointer.Int64Ptr(1),
+		//}
+		//
+		//createCluster(ctx, workloadClusterConfigInput)
+		//
+		//By("Waiting for initial cluster to reach infrastructure ready")
+		//Eventually(func() bool {
+		//	cluster := &clusterv1.Cluster{}
+		//	if err := e2eCtx.Environment.BootstrapClusterProxy.GetClient().Get(context.TODO(), apimachinerytypes.NamespacedName{Namespace: namespace.Name, Name: clusterName}, cluster); nil == err {
+		//		if cluster.Status.InfrastructureReady {
+		//			return true
+		//		}
+		//	}
+		//	return false
+		//}, e2eCtx.E2EConfig.GetIntervals("", "wait-cluster")...).Should(Equal(true))
 
 		infracluster := &infrav1.AWSCluster{}
 		err := e2eCtx.Environment.BootstrapClusterProxy.GetClient().Get(context.TODO(), apimachinerytypes.NamespacedName{Namespace: namespace.Name, Name: clusterName}, infracluster)
