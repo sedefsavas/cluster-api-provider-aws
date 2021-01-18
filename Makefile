@@ -235,7 +235,12 @@ generate-go-core: ## Runs Go related generate targets
 		--go-header-file=./hack/boilerplate/boilerplate.generatego.txt
 
 	$(CONVERSION_GEN) \
-		--input-dirs=./api/v1alpha2 \
+		--input-dirs=./api/v1alpha3 \
+		--output-file-base=zz_generated.conversion \
+		--go-header-file=./hack/boilerplate/boilerplate.generatego.txt
+
+	$(CONVERSION_GEN) \
+		--input-dirs=./$(EXP_DIR)/api/v1alpha3 \
 		--output-file-base=zz_generated.conversion \
 		--go-header-file=./hack/boilerplate/boilerplate.generatego.txt
 
@@ -244,12 +249,20 @@ generate-go-eks-bootstrap: $(CONTROLLER_GEN)
 	$(CONTROLLER_GEN) \
 		paths=./bootstrap/eks/api/... \
 		object:headerFile=./hack/boilerplate/boilerplate.generatego.txt
+	$(CONVERSION_GEN) \
+		--input-dirs=./bootstrap/eks/api/v1alpha3 \
+		--output-file-base=zz_generated.conversion \
+		--go-header-file=./hack/boilerplate/boilerplate.generatego.txt
 
 .PHONY: generate-go-eks-controlplane
 generate-go-eks-controlplane: $(CONTROLLER_GEN) $(CONVERSION_GEN)
 	$(CONTROLLER_GEN) \
 		paths=./controlplane/eks/api/... \
 		object:headerFile=./hack/boilerplate/boilerplate.generatego.txt
+	$(CONVERSION_GEN) \
+		--input-dirs=./controlplane/eks/api/v1alpha3 \
+		--output-file-base=zz_generated.conversion \
+		--go-header-file=./hack/boilerplate/boilerplate.generatego.txt
 
 .PHONY: generate-manifests
 generate-manifests:

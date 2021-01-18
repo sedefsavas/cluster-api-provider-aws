@@ -13,6 +13,6 @@
 # limitations under the License.
 
 MDBOOK_VERSION := v0.4.3
-GOLANG_VERSION := 1.13.15
+GOLANG_VERSION := 1.15.3
 PLANTUML_VERSION := 1.2020.16
 GH_VERSION := 1.2.0

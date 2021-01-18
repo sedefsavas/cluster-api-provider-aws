@@ -1,6 +1,6 @@
 
 ---
-apiVersion: admissionregistration.k8s.io/v1beta1
+apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   creationTimestamp: null
@@ -11,7 +11,7 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /validate-bootstrap-cluster-x-k8s-io-v1alpha3-eksconfig
+      path: /validate-bootstrap-cluster-x-k8s-io-v1alpha4-eksconfig
   failurePolicy: Fail
   matchPolicy: Equivalent
   name: validation.eksconfig.bootstrap.cluster.x-k8s.io
@@ -19,7 +19,7 @@ webhooks:
   - apiGroups:
     - bootstrap.cluster.x-k8s.io
     apiVersions:
-    - v1alpha3
+    - v1alpha4
     operations:
     - CREATE
     - UPDATE

@@ -1,14 +1,14 @@
 module sigs.k8s.io/cluster-api-provider-aws
 
-go 1.13
+go 1.15
 
 require (
 	github.com/apparentlymart/go-cidr v1.1.0
 	github.com/aws/amazon-vpc-cni-k8s v1.7.5
-	github.com/aws/aws-sdk-go v1.36.26
+	github.com/aws/aws-sdk-go v1.35.30
 	github.com/awslabs/goformation/v4 v4.15.0
 	github.com/blang/semver v3.5.1+incompatible
-	github.com/go-logr/logr v0.1.0
+	github.com/go-logr/logr v0.3.0
 	github.com/golang/mock v1.4.4
 	github.com/google/goexpect v0.0.0-20200816234442-b5b77125c2c5
 	github.com/google/goterm v0.0.0-20200907032337-555d40f16ae2 // indirect
@@ -21,17 +21,18 @@ require (
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/crypto v0.0.0-20200930160638-afb6bcd081ae
-	golang.org/x/net v0.0.0-20201110031124-69a78807bb2b
+	golang.org/x/net v0.0.0-20200707034311-ab3426394381
+	golang.org/x/sys v0.0.0-20200826173525-f9321e4c35a6 // indirect
 	gopkg.in/yaml.v2 v2.3.0
-	k8s.io/api v0.17.9
-	k8s.io/apiextensions-apiserver v0.17.9
-	k8s.io/apimachinery v0.17.9
-	k8s.io/client-go v0.17.9
-	k8s.io/component-base v0.17.9
+	k8s.io/api v0.19.2
+	k8s.io/apiextensions-apiserver v0.19.2
+	k8s.io/apimachinery v0.19.2
+	k8s.io/client-go v0.19.2
+	k8s.io/component-base v0.19.2
 	k8s.io/klog v1.0.0
 	k8s.io/utils v0.0.0-20200912215256-4140de9c8800
 	sigs.k8s.io/aws-iam-authenticator v0.5.1
-	sigs.k8s.io/cluster-api v0.3.12
-	sigs.k8s.io/controller-runtime v0.5.14
+	sigs.k8s.io/cluster-api v0.3.11-0.20210115191551-61dc332270dc
+	sigs.k8s.io/controller-runtime v0.7.1-0.20201215171748-096b2e07c091
 	sigs.k8s.io/yaml v1.2.0
 )
