@@ -39,6 +39,8 @@ providers:
         # Use manifest from source files
         value: "https://storage.googleapis.com/staging.sedef-302310.appspot.com/components/daily_dev_2021-01-20/core-components.yaml"
         type: "url"
+        files:
+          - sourcePath: "./shared/v1alpha4/metadata.yaml"
         replacements:
           - old: "imagePullPolicy: Always"
             new: "imagePullPolicy: IfNotPresent"
@@ -54,6 +56,8 @@ providers:
         # Use manifest from source files
         value: "https://storage.googleapis.com/staging.sedef-302310.appspot.com/components/daily_dev_2021-01-20/bootstrap-components.yaml"
         type: "url"
+        files:
+          - sourcePath: "./shared/v1alpha4/metadata.yaml"
         replacements:
           - old: "imagePullPolicy: Always"
             new: "imagePullPolicy: IfNotPresent"
@@ -76,6 +80,8 @@ providers:
             new: "--leader-elect=false"
           - old: --metrics-bind-addr=127.0.0.1:8080
             new: --metrics-bind-addr=:8080
+        files:
+          - sourcePath: "./shared/v1alpha4/metadata.yaml"
 
   - name: aws
     type: InfrastructureProvider
@@ -83,6 +89,8 @@ providers:
       - name: v0.5.0
         # Use manifest from source files
         value: ../../../config
+        files:
+          - sourcePath: "./shared/v1alpha4_provider/metadata.yaml"
         replacements:
           - old: "imagePullPolicy: Always"
             new: "imagePullPolicy: IfNotPresent"
@@ -96,6 +104,7 @@ providers:
             new: gcr.io/k8s-staging-cluster-api/capa-manager:e2e
     files:
       # Add a cluster template
+      - sourcePath: "./shared/v1alpha4/metadata.yaml"
       - sourcePath: "./infrastructure-aws/cluster-template.yaml"
       - sourcePath: "./infrastructure-aws/cluster-template-ssm.yaml"
         targetName: "cluster-template-ssm.yaml"
