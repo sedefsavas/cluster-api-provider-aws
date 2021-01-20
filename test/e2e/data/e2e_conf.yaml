@@ -37,7 +37,7 @@ providers:
     versions:
       - name: v0.3.12
         # Use manifest from source files
-        value: "https://storage.cloud.google.com/staging.sedef-302310.appspot.com/components/daily_dev_2021-01-20/core-components.yaml"
+        value: "https://storage.googleapis.com/staging.sedef-302310.appspot.com/components/daily_dev_2021-01-20/core-components.yaml"
         type: "url"
         replacements:
           - old: "imagePullPolicy: Always"
@@ -52,7 +52,7 @@ providers:
     versions:
       - name: v0.3.12
         # Use manifest from source files
-        value: "https://storage.cloud.google.com/staging.sedef-302310.appspot.com/components/daily_dev_2021-01-20/bootstrap-components.yaml"
+        value: "https://storage.googleapis.com/staging.sedef-302310.appspot.com/components/daily_dev_2021-01-20/bootstrap-components.yaml"
         type: "url"
         replacements:
           - old: "imagePullPolicy: Always"
@@ -67,7 +67,7 @@ providers:
     versions:
       - name: v0.3.12
         # Use manifest from source files
-        value: "https://storage.cloud.google.com/staging.sedef-302310.appspot.com/components/daily_dev_2021-01-20/control-plane-components.yaml"
+        value: "https://storage.googleapis.com/staging.sedef-302310.appspot.com/components/daily_dev_2021-01-20/control-plane-components.yaml"
         type: "url"
         replacements:
           - old: "imagePullPolicy: Always"
