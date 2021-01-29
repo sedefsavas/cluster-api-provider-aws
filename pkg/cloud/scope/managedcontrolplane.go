@@ -55,6 +55,7 @@ type ManagedControlPlaneScopeParams struct {
 	Client         client.Client
 	Logger         logr.Logger
 	Cluster        *clusterv1.Cluster
+	AWSCluster     *infrav1.AWSCluster
 	ControlPlane   *ekscontrolplanev1.AWSManagedControlPlane
 	ControllerName string
 	Endpoints      []ServiceEndpoint
@@ -70,6 +71,9 @@ func NewManagedControlPlaneScope(params ManagedControlPlaneScopeParams) (*Manage
 	if params.Cluster == nil {
 		return nil, errors.New("failed to generate new scope from nil Cluster")
 	}
+	if params.AWSCluster == nil {
+		return nil, errors.New("failed to generate new scope from nil AWSCluster")
+	}
 	if params.ControlPlane == nil {
 		return nil, errors.New("failed to generate new scope from nil AWSManagedControlPlane")
 	}
@@ -77,7 +81,7 @@ func NewManagedControlPlaneScope(params ManagedControlPlaneScopeParams) (*Manage
 		params.Logger = klogr.New()
 	}
 
-	session, serviceLimiters, err := sessionForRegion(params.ControlPlane.Spec.Region, params.Endpoints)
+	session, serviceLimiters, err := sessionForClusterWithRegion(params.Client, params.AWSCluster, params.AWSCluster.Spec.Region, params.Endpoints, params.Logger)
 	if err != nil {
 		return nil, errors.Errorf("failed to create aws session: %v", err)
 	}
@@ -91,6 +95,7 @@ func NewManagedControlPlaneScope(params ManagedControlPlaneScopeParams) (*Manage
 		Logger:               params.Logger,
 		Client:               params.Client,
 		Cluster:              params.Cluster,
+		AWSCluster:           params.AWSCluster,
 		ControlPlane:         params.ControlPlane,
 		patchHelper:          helper,
 		session:              session,
@@ -108,6 +113,7 @@ type ManagedControlPlaneScope struct {
 	patchHelper *patch.Helper
 
 	Cluster      *clusterv1.Cluster
+	AWSCluster   *infrav1.AWSCluster
 	ControlPlane *ekscontrolplanev1.AWSManagedControlPlane
 
 	session         awsclient.ConfigProvider
