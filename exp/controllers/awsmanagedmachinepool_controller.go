@@ -26,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/tools/record"
+	infrav1 "sigs.k8s.io/cluster-api-provider-aws/api/v1alpha3"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
 	capiv1exp "sigs.k8s.io/cluster-api/exp/api/v1alpha3"
 	"sigs.k8s.io/cluster-api/util"
@@ -139,11 +140,25 @@ func (r *AWSManagedMachinePoolReconciler) Reconcile(req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, nil
 	}
 
+	awsCluster := &infrav1.AWSCluster{}
+
+	infraClusterName := client.ObjectKey{
+		Namespace: machinePool.Namespace,
+		Name:      cluster.Spec.InfrastructureRef.Name,
+	}
+
+	if err := r.Client.Get(ctx, infraClusterName, awsCluster); err != nil {
+		// AWSCluster is not ready
+		logger.Info("AWSCluster is not ready")
+		return reconcile.Result{}, nil
+	}
+
 	machinePoolScope, err := scope.NewManagedMachinePoolScope(scope.ManagedMachinePoolScopeParams{
 		Logger:             logger,
 		Client:             r.Client,
 		ControllerName:     "awsmanagedmachinepool",
 		Cluster:            cluster,
+		AWSCluster:         awsCluster,
 		ControlPlane:       controlPlane,
 		MachinePool:        machinePool,
 		ManagedMachinePool: awsPool,
