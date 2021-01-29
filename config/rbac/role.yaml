@@ -76,18 +76,18 @@ rules:
   - list
   - watch
 - apiGroups:
-    - infrastructure.cluster.x-k8s.io
+  - infrastructure.cluster.x-k8s.io
   resources:
-    - awsclusterroleprincipals
-    - awsclusterstaticprincipals
+  - awsclusterroleprincipals
+  - awsclusterstaticprincipals
   verbs:
-    - create
-    - delete
-    - get
-    - list
-    - patch
-    - update
-    - watch
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
 - apiGroups:
   - infrastructure.cluster.x-k8s.io
   resources:
