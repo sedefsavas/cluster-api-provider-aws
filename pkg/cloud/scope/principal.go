@@ -11,6 +11,7 @@ import (
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	infrav1 "sigs.k8s.io/cluster-api-provider-aws/api/v1alpha3"
+	"time"
 )
 
 type AWSPrincipalTypeProvider interface {
@@ -45,6 +46,7 @@ func NewAWSRolePrincipalTypeProvider(principal *infrav1.AWSClusterRolePrincipal,
 		if principal.Spec.InlinePolicy != "" {
 			p.Policy = aws.String(principal.Spec.InlinePolicy)
 		}
+		p.Duration = time.Duration(principal.Spec.DurationSeconds) * time.Second
 	})
 
 	return &AWSRolePrincipalTypeProvider{

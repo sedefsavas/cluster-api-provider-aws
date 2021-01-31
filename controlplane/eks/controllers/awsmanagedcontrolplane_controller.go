@@ -158,7 +158,7 @@ func (r *AWSManagedControlPlaneReconciler) Reconcile(req ctrl.Request) (res ctrl
 		Client:               r.Client,
 		Logger:               logger,
 		Cluster:              cluster,
-		AWSCluster:			  awsCluster,
+		AWSCluster:           awsCluster,
 		ControlPlane:         awsControlPlane,
 		ControllerName:       "awsmanagedcontrolplane",
 		EnableIAM:            r.EnableIAM,

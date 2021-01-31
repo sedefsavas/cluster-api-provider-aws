@@ -32,7 +32,6 @@ type AWSClusterPrincipalSpec struct {
 	// AWSClusterPrincipal from any namespace. This field is intentionally not a
 	// pointer because the nil behavior (no namespaces) is undesirable here.
 	//
-	//
 	// +optional
 	AllowedNamespaces metav1.LabelSelector `json:"allowedNamespaces"`
 }
@@ -45,7 +44,7 @@ type AWSRoleSpec struct {
 	// The duration, in seconds, of the role session before it is renewed.
 	// +kubebuilder:validation:Minimum:=900
 	// +kubebuilder:validation:Maximum:=43200
-	DurationSeconds uint `json:"durationSeconds,omitempty"`
+	DurationSeconds int32 `json:"durationSeconds,omitempty"`
 	// An IAM policy in JSON format that you want to use as an inline session policy.
 	InlinePolicy string `json:"inlinePolicy,omitempty"`
 
