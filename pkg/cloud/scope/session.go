@@ -18,6 +18,7 @@ package scope
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -217,6 +218,7 @@ func buildProvidersForRef(ctx context.Context, providers []AWSPrincipalTypeProvi
 		if err != nil {
 			return providers, err
 		}
+		fmt.Println("xx ekliyor roleprincipali")
 		log.V(4).Info("Found an AWSClusterRolePrincipal", "principal", principal.GetName())
 		provider = NewAWSRolePrincipalTypeProvider(principal, awsConfig, log)
 		providers = append(providers, provider)

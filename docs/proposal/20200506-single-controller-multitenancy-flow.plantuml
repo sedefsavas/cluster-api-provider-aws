@@ -22,7 +22,18 @@ if (AWSCluster has spec.IdentityRef?) then (yes)
     :fetch cached credential provider;
   endif
 else (no)
-  :current mechanism for checking session cache;
+  if (current mechanism for checking session cache) then (no valid credential)
+      :WorkloadUser;
+      if (Create ControllersPrincialPermission for AWSCluster.name
+      in controllers namespace) then (no)
+        :AWS controller;
+        :return with error;
+      else (yes)
+        :AWS controller;
+        :consider WorkloadUser as authorized to use controllers principalRef
+        and continue reconcile;
+      endif
+  endif
 endif
 :call STS::GetCallerIdentity():
 if (awscluster.AccountID != nil && awscluster.AccountID != GetCallerIdentity?) then (error)

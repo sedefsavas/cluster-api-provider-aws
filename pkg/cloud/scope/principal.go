@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/go-logr/logr"
+	"fmt"
 	corev1 "k8s.io/api/core/v1"
 	infrav1 "sigs.k8s.io/cluster-api-provider-aws/api/v1alpha3"
 	"time"
@@ -38,6 +39,7 @@ func NewAWSStaticPrincipalTypeProvider(principal *infrav1.AWSClusterStaticPrinci
 func NewAWSRolePrincipalTypeProvider(principal *infrav1.AWSClusterRolePrincipal, awsConfig *aws.Config, log logr.Logger) *AWSRolePrincipalTypeProvider {
 	sess := session.Must(session.NewSession(awsConfig))
 
+	fmt.Printf("xx principal %v\n",principal)
 	creds := stscreds.NewCredentials(sess, principal.Spec.RoleArn, func(p *stscreds.AssumeRoleProvider) {
 		if principal.Spec.ExternalID != "" {
 			p.ExternalID = aws.String(principal.Spec.ExternalID)
@@ -48,6 +50,8 @@ func NewAWSRolePrincipalTypeProvider(principal *infrav1.AWSClusterRolePrincipal,
 		}
 		p.Duration = time.Duration(principal.Spec.DurationSeconds) * time.Second
 	})
+
+	fmt.Printf("xx creadent %v\n",creds)
 
 	return &AWSRolePrincipalTypeProvider{
 		credentials: creds,
