@@ -217,6 +217,10 @@ func main() {
 			setupLog.Error(err, "unable to create webhook", "webhook", "AWSCluster")
 			os.Exit(1)
 		}
+		if err = (&infrav1alpha3.AWSClusterControllerPrincipal{}).SetupWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "AWSClusterControllerPrincipal")
+			os.Exit(1)
+		}
 		if err = (&infrav1alpha3.AWSMachine{}).SetupWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "AWSMachine")
 			os.Exit(1)
@@ -227,6 +231,10 @@ func main() {
 		}
 		if err = (&infrav1alpha3.AWSClusterList{}).SetupWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "AWSClusterList")
+			os.Exit(1)
+		}
+		if err = (&infrav1alpha3.AWSClusterControllerPrincipalList{}).SetupWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "AWSClusterControllerPrincipalList")
 			os.Exit(1)
 		}
 		if feature.Gates.Enabled(feature.EKS) {

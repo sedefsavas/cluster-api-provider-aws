@@ -16,6 +16,8 @@ limitations under the License.
 
 package v1alpha3
 
+import corev1 "k8s.io/api/core/v1"
+
 // TODO (richardcase): get this working with defaulter-gen
 
 // SetDefaults_Bastion is used by defaulter-gen
@@ -45,6 +47,16 @@ func SetDefaults_NetworkSpec(obj *NetworkSpec) { //nolint:golint,stylecheck
 					ToPort:      65535,
 				},
 			},
+		}
+	}
+}
+
+// SetDefaults_NetworkSpec is used by defaulter-gen
+func SetDefaults_PrincipalRef(obj *corev1.ObjectReference) { //nolint:golint,stylecheck
+	// Default to AWSClusterControllerPrincipal singleton
+	if obj == nil {
+		obj = &corev1.ObjectReference{
+			Name: AWSClusterControllerPrincipalName,
 		}
 	}
 }

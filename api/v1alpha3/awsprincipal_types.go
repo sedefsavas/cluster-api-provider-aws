@@ -22,18 +22,12 @@ import (
 )
 
 type AWSClusterPrincipalSpec struct {
-	// AllowedNamespaces is a selector of namespaces that AWSClusters can
-	// use this ClusterPrincipal from. This is a standard Kubernetes LabelSelector,
-	// a label query over a set of resources. The result of matchLabels and
-	// matchExpressions are ANDed. Controllers must not support AWSClusters in
-	// namespaces outside this selector.
-	//
-	// An empty selector (default) indicates that AWSClusters can use this
-	// AWSClusterPrincipal from any namespace. This field is intentionally not a
-	// pointer because the nil behavior (no namespaces) is undesirable here.
-	//
 	// +optional
-	AllowedNamespaces metav1.LabelSelector `json:"allowedNamespaces"`
+	AllowedNamespaces *AllowedNamespacesList `json:"allowedNamespaces"`
+}
+
+type  AllowedNamespacesList struct {
+	NamespacesList []string `json:"list"`
 }
 
 type AWSRoleSpec struct {
@@ -55,7 +49,7 @@ type AWSRoleSpec struct {
 }
 
 // +kubebuilder:object:root=true
-// +kubebuilder:resource:path=awsclusterstaticprincipals,scope=Namespaced,categories=cluster-api
+// +kubebuilder:resource:path=awsclusterstaticprincipals,scope=Cluster,categories=cluster-api
 // +kubebuilder:storageversion
 
 // AWSClusterStaticPrincipal represents a reference to an AWS access key ID and
@@ -85,14 +79,10 @@ type AWSClusterStaticPrincipalSpec struct {
 	//  SecretAccessKey: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
 	//  SessionToken: Optional
 	SecretRef corev1.SecretReference `json:"secretRef"`
-
-	// SourcePrincipalRef is a reference to another principal which will be chained to do
-	// role assumption.
-	SourcePrincipalRef *corev1.ObjectReference `json:"sourcePrincipalRef,omitempty"`
 }
 
 // +kubebuilder:object:root=true
-// +kubebuilder:resource:path=awsclusterroleprincipals,scope=Namespaced,categories=cluster-api
+// +kubebuilder:resource:path=awsclusterroleprincipals,scope=Cluster,categories=cluster-api
 type AWSClusterRolePrincipal struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -126,8 +116,31 @@ type AWSClusterRolePrincipalSpec struct {
 	ExternalID string `json:"externalID,omitempty"`
 
 	// SourcePrincipalRef is a reference to another principal which will be chained to do
-	// role assumption.
+	// role assumption. All principal types are accepted.
 	SourcePrincipalRef *corev1.ObjectReference `json:"sourcePrincipalRef,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+// +kubebuilder:resource:path=awsclustercontrollerprincipals,scope=Cluster,categories=cluster-api
+type AWSClusterControllerPrincipal struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	// Spec for this AWSClusterControllerPrincipal.
+	Spec AWSClusterControllerPrincipalSpec `json:"spec,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+
+// AWSClusterControllerPrincipalList contains a list of AWSClusterControllerPrincipal
+type AWSClusterControllerPrincipalList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []AWSClusterControllerPrincipal `json:"items"`
+}
+
+type AWSClusterControllerPrincipalSpec struct {
+	AWSClusterPrincipalSpec `json:",inline"`
 }
 
 func init() {
@@ -135,5 +148,8 @@ func init() {
 		&AWSClusterStaticPrincipal{},
 		&AWSClusterStaticPrincipalList{},
 		&AWSClusterRolePrincipal{},
-		&AWSClusterRolePrincipalList{})
+		&AWSClusterRolePrincipalList{},
+		&AWSClusterControllerPrincipal{},
+		&AWSClusterControllerPrincipalList{},
+	)
 }

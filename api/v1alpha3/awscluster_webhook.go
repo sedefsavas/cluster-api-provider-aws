@@ -104,4 +104,5 @@ func (r *AWSCluster) ValidateUpdate(old runtime.Object) error {
 func (r *AWSCluster) Default() {
 	SetDefaults_Bastion(&r.Spec.Bastion)
 	SetDefaults_NetworkSpec(&r.Spec.NetworkSpec)
+	SetDefaults_PrincipalRef(r.Spec.PrincipalRef)
 }

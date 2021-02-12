@@ -103,7 +103,7 @@ func getEnv(key string) (string, error) {
 }
 
 func (c AWSCredentials) RenderAWSDefaultProfile() (string, error) {
-	tmpl, err := template.New("AWS Credentials").Parse(AWSCredentialsTemplate)
+	tmpl, err := template.New("AWS credentials").Parse(AWSCredentialsTemplate)
 	if err != nil {
 		return "", err
 	}
