@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/gob"
+	"encoding/json"
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -26,7 +27,6 @@ type AWSPrincipalTypeProvider interface {
 
 func NewAWSControllerPrincipalTypeProvider() *AWSControllerPrincipalTypeProvider {
 	def := defaults.Get()
-	fmt.Println("XXZZZ controller creds")
 	creds, _ := def.Config.Credentials.Get()
 	fmt.Println(creds)
 
@@ -51,11 +51,9 @@ func (p *AWSControllerPrincipalTypeProvider) Retrieve() (credentials.Value, erro
 func (p *AWSControllerPrincipalTypeProvider) IsExpired() bool {
 	return p.credentials.IsExpired()
 }
-
 func (p *AWSControllerPrincipalTypeProvider) Name() string {
 	return "controller-principal"
 }
-
 func (p *AWSControllerPrincipalTypeProvider) Hash() (string, error) {
 	var roleIdentityValue bytes.Buffer
 	err := gob.NewEncoder(&roleIdentityValue).Encode(p)
@@ -96,9 +94,15 @@ func GetAssumeRoleCredentials(principal *infrav1.AWSClusterRolePrincipal, awsCon
 	return creds
 }
 
-func NewAWSRolePrincipalTypeProvider(principal *infrav1.AWSClusterRolePrincipal, awsConfig *aws.Config, sourceProvider *AWSPrincipalTypeProvider, log logr.Logger) *AWSRolePrincipalTypeProvider {
+func NewAWSRolePrincipalTypeProvider(principal *infrav1.AWSClusterRolePrincipal, sourceProvider *AWSPrincipalTypeProvider, log logr.Logger) *AWSRolePrincipalTypeProvider {
+	if sourceProvider != nil{
+		fmt.Printf("xx asil %v source %v\n", principal.Name, (*sourceProvider).Name())
+	} else{
+		fmt.Printf("xx asil %v source yok\n", principal.Name)
+	}
 	return &AWSRolePrincipalTypeProvider{
-		credentials: GetAssumeRoleCredentials(principal, awsConfig),
+		credentials: nil,
+		//credentials: GetAssumeRoleCredentials(principal, awsConfig),
 		Principal:   principal,
 		sourceProvider: sourceProvider,
 		log:         log.WithName("AWSRolePrincipalTypeProvider"),
@@ -126,12 +130,11 @@ func (p *AWSStaticPrincipalTypeProvider) Hash() (string, error) {
 func (p *AWSStaticPrincipalTypeProvider) Retrieve() (credentials.Value, error) {
 	return p.credentials.Get()
 }
+func (p *AWSStaticPrincipalTypeProvider) Name() string {
+	return p.Principal.Name
+}
 func (p *AWSStaticPrincipalTypeProvider) IsExpired() bool {
 	return p.credentials.IsExpired()
-}
-
-func (p *AWSStaticPrincipalTypeProvider) Name() string {
-	return p.Principal.GetNamespace() + p.Principal.GetName()
 }
 
 type AWSRolePrincipalTypeProvider struct {
@@ -153,30 +156,37 @@ func (p *AWSRolePrincipalTypeProvider) Hash() (string, error) {
 }
 
 func (p *AWSRolePrincipalTypeProvider) Name() string {
-	return p.Principal.GetNamespace() + p.Principal.GetName()
+	return p.Principal.Name
 }
-
 func (p *AWSRolePrincipalTypeProvider) Retrieve() (credentials.Value, error) {
-	fmt.Println("xx retrieve is called")
-	if p.IsExpired(){
+	fmt.Println("xxooxxoo")
+	a, err :=json.Marshal(p)
+	if err != nil{
+		fmt.Println("xx role principal object")
+		fmt.Println(a)
+	}
+	if p.credentials == nil || p.IsExpired(){
+		fmt.Printf("xx RETRIEVE: %v\n", p.Principal.Name)
 		awsConfig := &aws.Config{}
 		if p.sourceProvider != nil {
+			fmt.Printf("xx SOURCE RETRIEVE: %v\n", (*p.sourceProvider).Name())
 			sourceCreds, err := (*p.sourceProvider).Retrieve()
+			fmt.Printf("xx SOURCE RETRIEVE: %v\n", sourceCreds.ProviderName)
 			if err != nil {
 				return credentials.Value{}, err
 			}
 			awsConfig = awsConfig.WithCredentials(credentials.NewStaticCredentialsFromCreds(sourceCreds))
 		}
+		fmt.Printf("xx ASSUMING ROLE: %v\n", p.Principal.Name)
+
 		creds := GetAssumeRoleCredentials(p.Principal, awsConfig)
 		// Update credentials
 		p.credentials = creds
-		return creds.Get()
 	}
 	return p.credentials.Get()
 }
 
 func (p *AWSRolePrincipalTypeProvider) IsExpired() bool {
-	fmt.Println("xx IS EXPIRED")
-	fmt.Println(p.credentials.IsExpired())
+	fmt.Printf("xx isexpired: %v\n",p.credentials.IsExpired())
 	return p.credentials.IsExpired()
 }
