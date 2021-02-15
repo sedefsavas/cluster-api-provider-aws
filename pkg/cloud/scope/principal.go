@@ -167,7 +167,7 @@ func (p *AWSRolePrincipalTypeProvider) Retrieve() (credentials.Value, error) {
 	}
 	if p.credentials == nil || p.IsExpired(){
 		fmt.Printf("xx RETRIEVE: %v\n", p.Principal.Name)
-		awsConfig := &aws.Config{}
+		awsConfig := aws.NewConfig()
 		if p.sourceProvider != nil {
 			fmt.Printf("xx SOURCE RETRIEVE: %v\n", (*p.sourceProvider).Name())
 			sourceCreds, err := (*p.sourceProvider).Retrieve()

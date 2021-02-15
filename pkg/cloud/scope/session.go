@@ -45,10 +45,44 @@ type ServiceEndpoint struct {
 }
 
 var sessionCache sync.Map
+var providerCache sync.Map
 
 type sessionCacheEntry struct {
 	session         *session.Session
 	serviceLimiters throttle.ServiceLimiters
+}
+
+func sessionForRegion(region string, endpoint []ServiceEndpoint) (*session.Session, throttle.ServiceLimiters, error) {
+	if s, ok := sessionCache.Load(region); ok {
+		entry := s.(*sessionCacheEntry)
+		return entry.session, entry.serviceLimiters, nil
+	}
+
+	resolver := func(service, region string, optFns ...func(*endpoints.Options)) (endpoints.ResolvedEndpoint, error) {
+		for _, s := range endpoint {
+			if service == s.ServiceID {
+				return endpoints.ResolvedEndpoint{
+					URL:           s.URL,
+					SigningRegion: s.SigningRegion,
+				}, nil
+			}
+		}
+		return endpoints.DefaultResolver().EndpointFor(service, region, optFns...)
+	}
+	ns, err := session.NewSession(&aws.Config{
+		Region:           aws.String(region),
+		EndpointResolver: endpoints.ResolverFunc(resolver),
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	sl := newServiceLimiters()
+	sessionCache.Store(region, &sessionCacheEntry{
+		session:         ns,
+		serviceLimiters: sl,
+	})
+	return ns, sl, nil
 }
 
 func sessionForClusterWithRegion(k8sClient client.Client, awsCluster *infrav1.AWSCluster, region string, endpoint []ServiceEndpoint, logger logr.Logger) (*session.Session, throttle.ServiceLimiters, error) {
@@ -85,7 +119,7 @@ func sessionForClusterWithRegion(k8sClient client.Client, awsCluster *infrav1.AW
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "Failed to calculate provider hash.")
 		}
-		cachedProvider, ok := sessionCache.Load(providerHash)
+		cachedProvider, ok := providerCache.Load(providerHash)
 		if ok {
 			fmt.Println("xx Provider cache te VAR")
 			provider = cachedProvider.(AWSPrincipalTypeProvider)
@@ -93,7 +127,7 @@ func sessionForClusterWithRegion(k8sClient client.Client, awsCluster *infrav1.AW
 			fmt.Println("xx Provider cache te YOK")
 			isChanged = true
 			// add this providers to the cache
-			sessionCache.Store(providerHash, provider)
+			providerCache.Store(providerHash, provider)
 			// TODO: Remove old provider from cache
 		}
 		awsProviders[i] = provider.(credentials.Provider)
@@ -101,7 +135,7 @@ func sessionForClusterWithRegion(k8sClient client.Client, awsCluster *infrav1.AW
 
 	if !isChanged {
 		fmt.Println("xx Ayni session kullanildi")
-		if s, ok := sessionCache.Load(region); ok {
+		if s, ok := sessionCache.Load(region+awsCluster.Name); ok {
 			entry := s.(*sessionCacheEntry)
 			return entry.session, entry.serviceLimiters, nil
 		}
@@ -120,7 +154,7 @@ func sessionForClusterWithRegion(k8sClient client.Client, awsCluster *infrav1.AW
 		return nil, nil, errors.Wrap(err, "Failed to create a new AWS session")
 	}
 	sl := newServiceLimiters()
-	sessionCache.Store(region, &sessionCacheEntry{
+	sessionCache.Store(region+awsCluster.Name, &sessionCacheEntry{
 		session:         ns,
 		serviceLimiters: sl,
 	})

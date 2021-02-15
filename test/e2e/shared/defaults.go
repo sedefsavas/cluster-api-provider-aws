@@ -43,7 +43,15 @@ const (
 	LimitAzFlavor                = "limit-az"
 	SpotInstancesFlavor          = "spot-instances"
 	SSMFlavor                    = "ssm"
+	MultitenancyFlavor          = "multitenancy"
 	StorageClassFailureZoneLabel = "failure-domain.beta.kubernetes.io/zone"
+	MultiTenancyUserName         = "MULTI_TENANCY_USER_NAME"
+	MultiTenancyRoleName         = "MULTI_TENANCY_ROLE_NAME"
+	MultiTenancyRoleARN        = "MULTI_TENANCY_ROLE_ARN"
+	MultiTenancyNestedRoleName   = "MULTI_TENANCY_NESTED_ROLE_NAME"
+	MultiTenancNestedyRoleARN   = "MULTI_TENANCY_NESTED_ROLE_ARN"
+	MultiTenancyPrincipalName   = "MULTI_TENANCY_PRINCIPAL_NAME"
+
 )
 
 // DefaultScheme returns the default scheme to use for testing

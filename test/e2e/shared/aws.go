@@ -30,6 +30,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	go_cfn "github.com/awslabs/goformation/v4/cloudformation"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/client"
 	awscreds "github.com/aws/aws-sdk-go/aws/credentials"
@@ -78,13 +79,18 @@ func NewAWSSessionWithKey(accessKey *iam.AccessKey) client.ConfigProvider {
 	return sess
 }
 
-// createCloudFormationStack ensures the cloudformation stack is up to date
-func createCloudFormationStack(prov client.ConfigProvider, t *cfn_bootstrap.Template) {
+// renderCloudFormationStack renders cloudformation
+func renderCloudFormationStack(t *cfn_bootstrap.Template) *go_cfn.Template {
+	return t.RenderCloudFormation()
+}
+
+// CreateCloudFormationStack ensures the cloudformation stack is up to date
+func CreateCloudFormationStack(prov client.ConfigProvider, t *cfn_bootstrap.Template){
 	Byf("Creating AWS CloudFormation stack for AWS IAM resources: stack-name=%s", t.Spec.StackName)
 	cfnSvc := cloudformation.NewService(cfn.New(prov))
-	cfnTemplate := t.RenderCloudFormation()
+
 	Expect(
-		cfnSvc.ReconcileBootstrapStack(t.Spec.StackName, *cfnTemplate),
+		cfnSvc.ReconcileBootstrapStack(t.Spec.StackName, *renderCloudFormationStack(t)),
 	).To(Succeed())
 }
 

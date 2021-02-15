@@ -87,11 +87,12 @@ func Node1BeforeSuite(e2eCtx *E2EContext) []byte {
 	Expect(err).NotTo(HaveOccurred())
 	e2eCtx.AWSSession = NewAWSSession()
 	boostrapTemplate := getBootstrapTemplate(e2eCtx)
+	e2eCtx.CloudFormationTemplate = renderCloudFormationStack(boostrapTemplate)
 	if !e2eCtx.Settings.SkipCloudFormationCreation {
-		createCloudFormationStack(e2eCtx.AWSSession, boostrapTemplate)
+		CreateCloudFormationStack(e2eCtx.AWSSession, boostrapTemplate)
 	}
 	ensureNoServiceLinkedRoles(e2eCtx.AWSSession)
-	ensureSSHKeyPair(e2eCtx.AWSSession, DefaultSSHKeyPairName)
+	//ensureSSHKeyPair(e2eCtx.AWSSession, DefaultSSHKeyPairName)
 	e2eCtx.Environment.BootstrapAccessKey = newUserAccessKey(e2eCtx.AWSSession, boostrapTemplate.Spec.BootstrapUser.UserName)
 	e2eCtx.BootstratpUserAWSSession = NewAWSSessionWithKey(e2eCtx.Environment.BootstrapAccessKey)
 

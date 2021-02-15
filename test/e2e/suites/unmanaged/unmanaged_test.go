@@ -21,9 +21,18 @@ package unmanaged
 import (
 	"context"
 	"fmt"
+	cfn "github.com/aws/aws-sdk-go/service/cloudformation"
+	"github.com/aws/aws-sdk-go/service/iam"
+	"github.com/aws/aws-sdk-go/service/iam/iamiface"
+	cfn_iam "github.com/awslabs/goformation/v4/cloudformation/iam"
+	"github.com/pkg/errors"
 	"os"
 	"path/filepath"
-	"sigs.k8s.io/cluster-api-provider-aws/exp/instancestate"
+	"regexp"
+	cmdbootstrapv1 "sigs.k8s.io/cluster-api-provider-aws/cmd/clusterawsadm/api/bootstrap/v1alpha1"
+	apiiam "sigs.k8s.io/cluster-api-provider-aws/cmd/clusterawsadm/api/iam/v1alpha1"
+	cfn_bootstrap "sigs.k8s.io/cluster-api-provider-aws/cmd/clusterawsadm/cloudformation/bootstrap"
+	"sigs.k8s.io/cluster-api-provider-aws/cmd/clusterawsadm/converters"
 	"strconv"
 	"strings"
 	"time"
@@ -978,4 +987,105 @@ func waitForStatefulSetRunning(info statefulSetInfo, k8sclient crclient.Client) 
 			return *statefulset.Spec.Replicas == statefulset.Status.ReadyReplicas, nil
 		}, 10*time.Minute, 30*time.Second,
 	).Should(BeTrue())
+}
+
+func createRole(roleName string, trustedPrincipalARN string, withControllerPolicyAttached bool) string {
+	iamSvc := iam.New(e2eCtx.AWSSession)
+	trustRelationshipJSON, err := converters.IAMPolicyDocumentToJSON(*PrincipalAWSTrustRelationship(trustedPrincipalARN))
+	Expect(err).NotTo(HaveOccurred())
+
+	input := &iam.CreateRoleInput{
+		RoleName:                 aws.String(roleName),
+		AssumeRolePolicyDocument: aws.String(trustRelationshipJSON),
+	}
+	out, err := iamSvc.CreateRole(input)
+	Expect(err).NotTo(HaveOccurred())
+
+	if withControllerPolicyAttached {
+		policyList, err := iamSvc.ListPolicies(&iam.ListPoliciesInput{
+			Scope: aws.String(iam.PolicyScopeTypeLocal),
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		policyARN := ""
+		for _, policy := range policyList.Policies {
+			if aws.StringValue(policy.PolicyName) == e2eCtx.Environment.BootstrapTemplate.NewManagedName("controllers") {
+				policyARN = aws.StringValue(policy.Arn)
+				break
+			}
+		}
+		err = attachIAMRolePolicy(iamSvc, roleName, policyARN)
+		Expect(err).NotTo(HaveOccurred())
+	}
+	return aws.StringValue(out.Role.Arn)
+}
+
+func addToTemplate (roleName string, trustedPrincipalARN string){
+	trustRelationshipJSON, err := converters.IAMPolicyDocumentToJSON(*cfn_bootstrap.IdentityAssumeRolePolicy(trustedPrincipalARN))
+	Expect(err).NotTo(HaveOccurred())
+	// Make a Regex to say we only want letters and numbers
+	reg, err := regexp.Compile("[^a-zA-Z0-9]+")
+	Expect(err).NotTo(HaveOccurred())
+
+	alphaNumericRoleName := reg.ReplaceAllString(roleName, "")
+	e2eCtx.CloudFormationTemplate.Resources[alphaNumericRoleName] = &cfn_iam.Role{
+		RoleName:                 roleName,
+		AssumeRolePolicyDocument: aws.String(trustRelationshipJSON),
+	}
+
+	yaml, err := e2eCtx.CloudFormationTemplate.YAML()
+	Expect(err).NotTo(HaveOccurred())
+	processedYaml := string(yaml)
+	cfnSvc := cfn.New(e2eCtx.AWSSession)
+	_, err = cfnSvc.CreateChangeSet(&cfn.CreateChangeSetInput{
+		Capabilities: []*string{aws.String("CAPABILITY_NAMED_IAM")},
+		ChangeSetName: aws.String("changeset"),
+		TemplateBody:     aws.String(processedYaml),
+		StackName: aws.String(e2eCtx.Environment.BootstrapTemplate.Spec.StackName),
+	})
+	Expect(err).NotTo(HaveOccurred())
+
+	_, err = cfnSvc.ExecuteChangeSet(&cfn.ExecuteChangeSetInput{
+		ChangeSetName:       aws.String("changeset"),
+		ClientRequestToken: nil,
+		StackName:          aws.String(e2eCtx.Environment.BootstrapTemplate.Spec.StackName),
+	})
+	Expect(err).NotTo(HaveOccurred())
+
+}
+
+//policies := []*string{
+//aws.String("arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"),
+//}
+func attachIAMRolePolicy(IAMSvc iamiface.IAMAPI, roleName string, policyARN string) error {
+	IAMSvc.GetPolicy(&iam.GetPolicyInput{})
+	input := &iam.AttachRolePolicyInput{
+		RoleName:  aws.String(roleName),
+		PolicyArn: aws.String(policyARN),
+	}
+	_, err := IAMSvc.AttachRolePolicy(input)
+	if err != nil {
+		return errors.Wrapf(err, "error attaching policy %s to role %s", policyARN, roleName)
+	}
+
+	return nil
+}
+
+func PrincipalAWSTrustRelationship(principalARN string) *apiiam.PolicyDocument {
+	principal := make(apiiam.Principals)
+	principal[apiiam.PrincipalAWS] = []string{principalARN}
+
+	policy := &apiiam.PolicyDocument{
+		Version: "2012-10-17",
+		Statement: []apiiam.StatementEntry{
+			{
+				Effect: "Allow",
+				Action: []string{
+					"sts:AssumeRole",
+				},
+				Principal: principal,
+			},
+		},
+	}
+	return policy
 }
