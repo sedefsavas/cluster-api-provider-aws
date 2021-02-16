@@ -19,6 +19,8 @@ package scope
 import (
 	"context"
 	"fmt"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
+	"sigs.k8s.io/cluster-api/util/conditions"
 	"sync"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -121,10 +123,8 @@ func sessionForClusterWithRegion(k8sClient client.Client, awsCluster *infrav1.AW
 		}
 		cachedProvider, ok := providerCache.Load(providerHash)
 		if ok {
-			fmt.Println("xx Provider cache te VAR")
 			provider = cachedProvider.(AWSPrincipalTypeProvider)
 		} else {
-			fmt.Println("xx Provider cache te YOK")
 			isChanged = true
 			// add this providers to the cache
 			providerCache.Store(providerHash, provider)
@@ -134,7 +134,6 @@ func sessionForClusterWithRegion(k8sClient client.Client, awsCluster *infrav1.AW
 	}
 
 	if !isChanged {
-		fmt.Println("xx Ayni session kullanildi")
 		if s, ok := sessionCache.Load(region+awsCluster.Name); ok {
 			entry := s.(*sessionCacheEntry)
 			return entry.session, entry.serviceLimiters, nil
@@ -144,10 +143,19 @@ func sessionForClusterWithRegion(k8sClient client.Client, awsCluster *infrav1.AW
 		Region:           aws.String(region),
 		EndpointResolver: endpoints.ResolverFunc(resolver),
 	}
+
 	if len(providers) > 0 {
+		// Check if principal credentials can be retrieved. This also checks authorization if nested principals are
+		_, err := providers[0].Retrieve()
+		if err != nil {
+			fmt.Println("xx SEDEF")
+			conditions.MarkFalse(awsCluster, infrav1.PrincipalCredentialRetrievedCondition, infrav1.PrincipalCredentialRetrievalFailedReason, clusterv1.ConditionSeverityError, err.Error())
+			return nil, nil, errors.Wrap(err, "Failed to retrieve principal credentials")
+		}
 		awsConfig = awsConfig.WithCredentials(credentials.NewChainCredentials(awsProviders))
 	}
-	fmt.Println("xx Yeni session kullanildi")
+
+	conditions.MarkTrue(awsCluster, infrav1.PrincipalCredentialRetrievedCondition)
 
 	ns, err := session.NewSession(awsConfig)
 	if err != nil {
@@ -247,6 +255,11 @@ func buildProvidersForRef(ctx context.Context, providers []AWSPrincipalTypeProvi
 		}
 
 		if !clusterIsPermittedToUsePrincipal(principal.Spec.AllowedNamespaces, awsCluster.Namespace) {
+			if awsCluster.Spec.PrincipalRef.Name == principal.Name{
+				conditions.MarkFalse(awsCluster, infrav1.PrincipalUsageAllowedCondition, infrav1.PrincipalUsageUnauthorizedReason, clusterv1.ConditionSeverityError, err.Error())
+			} else {
+				conditions.MarkFalse(awsCluster, infrav1.PrincipalUsageAllowedCondition, infrav1.SourcePrincipalUsageUnauthorizedReason, clusterv1.ConditionSeverityError, err.Error())
+			}
 			return providers, errors.Errorf("AWSCluster %s/%s is not permitted to use principal %s", awsCluster.Namespace, awsCluster.Name, principal.Name)
 		}
 
@@ -266,6 +279,11 @@ func buildProvidersForRef(ctx context.Context, providers []AWSPrincipalTypeProvi
 		log.V(4).Info("Found an AWSClusterStaticPrincipal", "principal", principal.GetName())
 
 		if !clusterIsPermittedToUsePrincipal(principal.Spec.AllowedNamespaces, awsCluster.Namespace) {
+			if awsCluster.Spec.PrincipalRef.Name == principal.Name{
+				conditions.MarkFalse(awsCluster, infrav1.PrincipalUsageAllowedCondition, infrav1.PrincipalUsageUnauthorizedReason, clusterv1.ConditionSeverityError, err.Error())
+			} else {
+				conditions.MarkFalse(awsCluster, infrav1.PrincipalUsageAllowedCondition, infrav1.SourcePrincipalUsageUnauthorizedReason, clusterv1.ConditionSeverityError, err.Error())
+			}
 			return providers, errors.Errorf("AWSCluster %s/%s is not permitted to use principal %s", awsCluster.Namespace, awsCluster.Name, principal.Name)
 		}
 
@@ -279,6 +297,11 @@ func buildProvidersForRef(ctx context.Context, providers []AWSPrincipalTypeProvi
 		}
 
 		if !clusterIsPermittedToUsePrincipal(principal.Spec.AllowedNamespaces, awsCluster.Namespace) {
+			if awsCluster.Spec.PrincipalRef.Name == principal.Name{
+				conditions.MarkFalse(awsCluster, infrav1.PrincipalUsageAllowedCondition, infrav1.PrincipalUsageUnauthorizedReason, clusterv1.ConditionSeverityError, err.Error())
+			} else {
+				conditions.MarkFalse(awsCluster, infrav1.PrincipalUsageAllowedCondition, infrav1.SourcePrincipalUsageUnauthorizedReason, clusterv1.ConditionSeverityError, err.Error())
+			}
 			return providers, errors.Errorf("AWSCluster %s/%s is not permitted to use principal %s", awsCluster.Namespace, awsCluster.Name, principal.Name)
 		}
 
@@ -292,14 +315,6 @@ func buildProvidersForRef(ctx context.Context, providers []AWSPrincipalTypeProvi
 		var sourceProvider AWSPrincipalTypeProvider
 		if len(providers) > 0 {
 			sourceProvider = providers[len(providers)-1]
-			fmt.Printf("xx SOURE PROVIDER ADDED %v\n", sourceProvider.Name())
-
-			//creds, err := providers[len(providers)-1].Retrieve()
-			//fmt.Println(creds)
-			//if err != nil {
-			//	return providers, err
-			//}
-			//awsConfig = awsConfig.WithCredentials(awscreds.NewStaticCredentialsFromCreds(creds))
 			// Remove last provider
 			if len(providers) > 0 {
 				providers = providers[:len(providers)-1]
@@ -307,8 +322,6 @@ func buildProvidersForRef(ctx context.Context, providers []AWSPrincipalTypeProvi
 		}
 		log.V(4).Info("Found an AWSClusterRolePrincipal", "principal", principal.GetName())
 		if sourceProvider != nil{
-			fmt.Println("xx")
-			fmt.Println(sourceProvider.Name())
 			provider = NewAWSRolePrincipalTypeProvider(principal, &sourceProvider, log)
 		} else{
 			provider = NewAWSRolePrincipalTypeProvider(principal, nil, log)
@@ -317,6 +330,7 @@ func buildProvidersForRef(ctx context.Context, providers []AWSPrincipalTypeProvi
 	default:
 		return providers, errors.Errorf("No such provider known: '%s'", ref.Kind)
 	}
+	conditions.MarkTrue(awsCluster, infrav1.PrincipalUsageAllowedCondition)
 	return providers, nil
 }
 

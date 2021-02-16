@@ -18,8 +18,10 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"reflect"
+	"sigs.k8s.io/cluster-api/util/patch"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -95,6 +97,19 @@ func (r *AWSClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result, reter
 	}
 
 	log = log.WithValues("cluster", cluster.Name)
+	helper, err := patch.NewHelper(awsCluster, r.Client)
+
+	defer func() {
+		fmt.Println("xx pathing xx")
+			e := helper.Patch(
+				context.TODO(),
+				awsCluster,
+				patch.WithOwnedConditions{Conditions: []clusterv1.ConditionType{
+					infrav1.PrincipalCredentialRetrievedCondition,
+					infrav1.PrincipalUsageAllowedCondition,
+				}})
+			if e != nil{fmt.Println(e.Error())}
+	}()
 
 	// Create the scope.
 	clusterScope, err := scope.NewClusterScope(scope.ClusterScopeParams{

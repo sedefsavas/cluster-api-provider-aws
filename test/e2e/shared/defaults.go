@@ -21,10 +21,8 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-
-	"sigs.k8s.io/cluster-api/test/framework"
-
 	"sigs.k8s.io/cluster-api-provider-aws/api/v1alpha3"
+	"sigs.k8s.io/cluster-api/test/framework"
 )
 
 const (
@@ -41,15 +39,14 @@ const (
 	LimitAzFlavor                = "limit-az"
 	SpotInstancesFlavor          = "spot-instances"
 	SSMFlavor                    = "ssm"
-	MultitenancyFlavor          = "multitenancy"
+	MultitenancyFlavor           = "multitenancy"
 	StorageClassFailureZoneLabel = "failure-domain.beta.kubernetes.io/zone"
 	MultiTenancyUserName         = "MULTI_TENANCY_USER_NAME"
 	MultiTenancyRoleName         = "MULTI_TENANCY_ROLE_NAME"
-	MultiTenancyRoleARN        = "MULTI_TENANCY_ROLE_ARN"
+	MultiTenancyRoleARN          = "MULTI_TENANCY_ROLE_ARN"
 	MultiTenancyNestedRoleName   = "MULTI_TENANCY_NESTED_ROLE_NAME"
-	MultiTenancNestedyRoleARN   = "MULTI_TENANCY_NESTED_ROLE_ARN"
-	MultiTenancyPrincipalName   = "MULTI_TENANCY_PRINCIPAL_NAME"
-
+	MultiTenancNestedyRoleARN    = "MULTI_TENANCY_NESTED_ROLE_ARN"
+	MultiTenancyPrincipalName    = "MULTI_TENANCY_PRINCIPAL_NAME"
 )
 
 // DefaultScheme returns the default scheme to use for testing

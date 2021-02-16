@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/gob"
-	"encoding/json"
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -95,14 +94,8 @@ func GetAssumeRoleCredentials(principal *infrav1.AWSClusterRolePrincipal, awsCon
 }
 
 func NewAWSRolePrincipalTypeProvider(principal *infrav1.AWSClusterRolePrincipal, sourceProvider *AWSPrincipalTypeProvider, log logr.Logger) *AWSRolePrincipalTypeProvider {
-	if sourceProvider != nil{
-		fmt.Printf("xx asil %v source %v\n", principal.Name, (*sourceProvider).Name())
-	} else{
-		fmt.Printf("xx asil %v source yok\n", principal.Name)
-	}
 	return &AWSRolePrincipalTypeProvider{
 		credentials: nil,
-		//credentials: GetAssumeRoleCredentials(principal, awsConfig),
 		Principal:   principal,
 		sourceProvider: sourceProvider,
 		log:         log.WithName("AWSRolePrincipalTypeProvider"),
@@ -159,25 +152,15 @@ func (p *AWSRolePrincipalTypeProvider) Name() string {
 	return p.Principal.Name
 }
 func (p *AWSRolePrincipalTypeProvider) Retrieve() (credentials.Value, error) {
-	fmt.Println("xxooxxoo")
-	a, err :=json.Marshal(p)
-	if err != nil{
-		fmt.Println("xx role principal object")
-		fmt.Println(a)
-	}
 	if p.credentials == nil || p.IsExpired(){
-		fmt.Printf("xx RETRIEVE: %v\n", p.Principal.Name)
 		awsConfig := aws.NewConfig()
 		if p.sourceProvider != nil {
-			fmt.Printf("xx SOURCE RETRIEVE: %v\n", (*p.sourceProvider).Name())
 			sourceCreds, err := (*p.sourceProvider).Retrieve()
-			fmt.Printf("xx SOURCE RETRIEVE: %v\n", sourceCreds.ProviderName)
 			if err != nil {
 				return credentials.Value{}, err
 			}
 			awsConfig = awsConfig.WithCredentials(credentials.NewStaticCredentialsFromCreds(sourceCreds))
 		}
-		fmt.Printf("xx ASSUMING ROLE: %v\n", p.Principal.Name)
 
 		creds := GetAssumeRoleCredentials(p.Principal, awsConfig)
 		// Update credentials
@@ -187,6 +170,5 @@ func (p *AWSRolePrincipalTypeProvider) Retrieve() (credentials.Value, error) {
 }
 
 func (p *AWSRolePrincipalTypeProvider) IsExpired() bool {
-	fmt.Printf("xx isexpired: %v\n",p.credentials.IsExpired())
 	return p.credentials.IsExpired()
 }

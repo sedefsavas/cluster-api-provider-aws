@@ -52,6 +52,9 @@ type synchronizedBeforeTestSuiteConfig struct {
 // Node1BeforeSuite is the common setup down on the first ginkgo node before the test suite runs
 func Node1BeforeSuite(e2eCtx *E2EContext) []byte {
 	flag.Parse()
+		e2eCtx.Settings.ConfigPath="/Users/ssavas/dev/CAPA/cluster-api-provider-aws/test/e2e/data/e2e_conf.yaml"
+	e2eCtx.Settings.ArtifactFolder="/Users/ssavas/dev/CAPA/cluster-api-provider-aws/_artifacts"
+	e2eCtx.Settings.DataFolder="/Users/ssavas/dev/CAPA/cluster-api-provider-aws/test/e2e/data"
 	Expect(e2eCtx.Settings.ConfigPath).To(BeAnExistingFile(), "Invalid test suite argument. configPath should be an existing file.")
 	Expect(os.MkdirAll(e2eCtx.Settings.ArtifactFolder, 0o750)).To(Succeed(), "Invalid test suite argument. Can't create artifacts-folder %q", e2eCtx.Settings.ArtifactFolder)
 	Byf("Loading the e2e test configuration from %q", e2eCtx.Settings.ConfigPath)
