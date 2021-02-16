@@ -114,14 +114,16 @@ var _ = Describe("functional tests - unmanaged", func() {
 			addToCloudformationStack(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyNestedRoleName), aws.StringValue(assumedRole.Role.Arn))
 			assumedNestedRole, err := iamSvc.GetRole(&iam.GetRoleInput{RoleName: aws.String(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyNestedRoleName))})
 			shared.SetEnvVar(shared.MultiTenancNestedyRoleARN, aws.StringValue(assumedNestedRole.Role.Arn), false)
-			trustRelationshipJSON, err := converters.IAMPolicyDocumentToJSON(*PrincipalAWSTrustRelationship(aws.StringValue(assumedNestedRole.Role.Arn)))
-			Expect(err).NotTo(HaveOccurred())
+			//trustRelationshipJSON, err := converters.IAMPolicyDocumentToJSON(*PrincipalAWSTrustRelationship(aws.StringValue(assumedNestedRole.Role.Arn)))
+			//Expect(err).NotTo(HaveOccurred())
 
 			// Change trusted entity and disallow bootstrap user to assume this role.
-			iamSvc.UpdateAssumeRolePolicy(&iam.UpdateAssumeRolePolicyInput{
-				PolicyDocument: aws.String(trustRelationshipJSON),
-				RoleName:       assumedRole.Role.RoleName,
-			})
+			addToCloudformationStack(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyRoleName), aws.StringValue(assumedNestedRole.Role.Arn))
+
+			//iamSvc.UpdateAssumeRolePolicy(&iam.UpdateAssumeRolePolicyInput{
+			//	PolicyDocument: aws.String(trustRelationshipJSON),
+			//	RoleName:       assumedRole.Role.RoleName,
+			//})
 
 			time.Sleep(10 * time.Second)
 
@@ -166,7 +168,6 @@ var _ = Describe("functional tests - unmanaged", func() {
 
 			addToCloudformationStack(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyRoleName), aws.StringValue(bootstrapUser.User.Arn))
 
-			//roleARN := createRole(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyRoleName), aws.StringValue(bootstrapUser.User.Arn), true)
 			assumedRole, err := iamSvc.GetRole(&iam.GetRoleInput{RoleName: aws.String(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyRoleName))})
 			Expect(err).ShouldNot(HaveOccurred())
 			shared.SetEnvVar(shared.MultiTenancyRoleARN, aws.StringValue(assumedRole.Role.Arn), false)
@@ -174,14 +175,7 @@ var _ = Describe("functional tests - unmanaged", func() {
 			attachControllerPolicyToRole(aws.StringValue(assumedRole.Role.RoleName))
 			time.Sleep(10 * time.Second)
 
-			// Create a role that can be assumed by the assumed role.
-			//assumedRole, err := iamSvc.GetRole(&iam.GetRoleInput{RoleName: aws.String(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyRoleName))})
-			//Expect(err).ShouldNot(HaveOccurred())
-			//nestedRoleARN := createRole(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyNestedRoleName), aws.StringValue(assumedRole.Role.Arn), true)
-
 			addToCloudformationStack(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyNestedRoleName), aws.StringValue(assumedRole.Role.Arn))
-			//cfnSvc := cloudformation.NewService(cfn.New(e2eCtx.AWSSession))
-			//cfnSvc.ReconcileBootstrapStack(e2eCtx.Environment.BootstrapTemplate.Spec.StackName, *e2eCtx.CloudFormationTemplate)
 			assumedNestedRole, err := iamSvc.GetRole(&iam.GetRoleInput{RoleName: aws.String(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyNestedRoleName))})
 			shared.SetEnvVar(shared.MultiTenancNestedyRoleARN, aws.StringValue(assumedNestedRole.Role.Arn), false)
 			attachControllerPolicyToRole(aws.StringValue(assumedNestedRole.Role.RoleName))
@@ -212,14 +206,24 @@ var _ = Describe("functional tests - unmanaged", func() {
 		})
 		It("should create cluster with nested assumed role", func() {
 			By("Creating cluster")
-			//iamSvc := iam.New(e2eCtx.AWSSession)
-			//// Create a role that can be assumed by the assumed role.
-			//assumedRole, err := iamSvc.GetRole(&iam.GetRoleInput{RoleName: aws.String(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyRoleName))})
-			//Expect(err).ShouldNot(HaveOccurred())
-			//nestedRoleARN := createRole(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyNestedRoleName), aws.StringValue(assumedRole.Role.Arn), true)
-			//shared.SetEnvVar(shared.MultiTenancNestedyRoleARN, assumedRole.Role.Arn, false)
-			By("Creating cluster with nested assumed role principal")
+			iamSvc := iam.New(e2eCtx.AWSSession)
+			// Create a role that can be assumed by the bootstrap user.
+			bootstrapUser, err := iamSvc.GetUser(&iam.GetUserInput{UserName: aws.String(cmdbootstrapv1.DefaultBootstrapUserName)})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			addToCloudformationStack(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyRoleName), aws.StringValue(bootstrapUser.User.Arn))
+
+			assumedRole, err := iamSvc.GetRole(&iam.GetRoleInput{RoleName: aws.String(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyRoleName))})
+			Expect(err).ShouldNot(HaveOccurred())
+			shared.SetEnvVar(shared.MultiTenancyRoleARN, aws.StringValue(assumedRole.Role.Arn), false)
+			attachControllerPolicyToRole(aws.StringValue(assumedRole.Role.RoleName))
+			time.Sleep(10 * time.Second)
+
+			addToCloudformationStack(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyNestedRoleName), aws.StringValue(assumedRole.Role.Arn))
+			assumedNestedRole, err := iamSvc.GetRole(&iam.GetRoleInput{RoleName: aws.String(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyNestedRoleName))})
+			shared.SetEnvVar(shared.MultiTenancNestedyRoleARN, aws.StringValue(assumedNestedRole.Role.Arn), false)
 			shared.SetEnvVar(shared.MultiTenancyPrincipalName, e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyNestedRoleName), false)
+			attachControllerPolicyToRole(aws.StringValue(assumedNestedRole.Role.RoleName))
 
 			clusterName := fmt.Sprintf("cluster-%s", util.RandomString(6))
 			clusterctl.ApplyClusterTemplateAndWait(ctx, clusterctl.ApplyClusterTemplateAndWaitInput{
@@ -1205,6 +1209,8 @@ func addToCloudformationStack(roleName string, trustedPrincipalARN string) {
 	reg, err := regexp.Compile("[^a-zA-Z0-9]+")
 	Expect(err).NotTo(HaveOccurred())
 
+	yaml1, err := e2eCtx.CloudFormationTemplate.YAML()
+	processedYaml1 := string(yaml1)
 	alphaNumericRoleName := reg.ReplaceAllString(roleName, "")
 	e2eCtx.CloudFormationTemplate.Resources[alphaNumericRoleName] = &cfn_iam.Role{
 		RoleName:                 roleName,
@@ -1214,6 +1220,9 @@ func addToCloudformationStack(roleName string, trustedPrincipalARN string) {
 	yaml, err := e2eCtx.CloudFormationTemplate.YAML()
 	Expect(err).NotTo(HaveOccurred())
 	processedYaml := string(yaml)
+	if processedYaml == processedYaml1{
+		return
+	}
 	cfnSvc := cfn.New(e2eCtx.AWSSession)
 	_, err = cfnSvc.CreateChangeSet(&cfn.CreateChangeSetInput{
 		Capabilities:  []*string{aws.String("CAPABILITY_NAMED_IAM")},
