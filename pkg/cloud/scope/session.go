@@ -18,6 +18,7 @@ package scope
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -33,6 +34,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	infrav1 "sigs.k8s.io/cluster-api-provider-aws/api/v1alpha3"
 	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud/throttle"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
+	"sigs.k8s.io/cluster-api/util/conditions"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -44,15 +47,14 @@ type ServiceEndpoint struct {
 }
 
 var sessionCache sync.Map
+var providerCache sync.Map
 
 type sessionCacheEntry struct {
 	session         *session.Session
 	serviceLimiters throttle.ServiceLimiters
 }
 
-func sessionForClusterWithRegion(k8sClient client.Client, awsCluster *infrav1.AWSCluster, region string, endpoint []ServiceEndpoint, logger logr.Logger) (*session.Session, throttle.ServiceLimiters, error) {
-	log := logger.WithName("identity")
-	log.V(4).Info("Creating an AWS Session")
+func sessionForRegion(region string, endpoint []ServiceEndpoint) (*session.Session, throttle.ServiceLimiters, error) {
 	if s, ok := sessionCache.Load(region); ok {
 		entry := s.(*sessionCacheEntry)
 		return entry.session, entry.serviceLimiters, nil
@@ -69,48 +71,102 @@ func sessionForClusterWithRegion(k8sClient client.Client, awsCluster *infrav1.AW
 		}
 		return endpoints.DefaultResolver().EndpointFor(service, region, optFns...)
 	}
-
-	awsConfig := &aws.Config{
+	ns, err := session.NewSession(&aws.Config{
 		Region:           aws.String(region),
 		EndpointResolver: endpoints.ResolverFunc(resolver),
-	}
-	providers, err := getProvidersForCluster(context.Background(), k8sClient, awsCluster, awsConfig, log)
+	})
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "Failed to get providers for cluster")
-
+		return nil, nil, err
 	}
 
-	awsProviders := make([]credentials.Provider, len(providers))
-	for i, provider := range providers {
-		// load an existing matching providers from the cache if such a providers exists
-		providerHash, err := provider.Hash()
-		cachedProvider, ok := sessionCache.Load(providerHash)
-		if err != nil {
-			return nil, nil, errors.Wrap(err, "Failed to retrieve providers from cache")
-		}
-		if ok {
-			provider = cachedProvider.(AWSPrincipalTypeProvider)
-		} else {
-			// add this providers to the cache
-			sessionCache.Store(providerHash, provider)
-		}
-		awsProviders[i] = provider.(credentials.Provider)
-	}
-
-	if len(awsProviders) > 0 {
-		awsConfig.Credentials = credentials.NewChainCredentials(awsProviders)
-	}
-
-	ns, err := session.NewSession(awsConfig)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "Failed to create a new AWS session")
-	}
 	sl := newServiceLimiters()
 	sessionCache.Store(region, &sessionCacheEntry{
 		session:         ns,
 		serviceLimiters: sl,
 	})
 	return ns, sl, nil
+}
+
+func sessionForClusterWithRegion(k8sClient client.Client, awsCluster *infrav1.AWSCluster, region string, endpoint []ServiceEndpoint, logger logr.Logger) (*session.Session, throttle.ServiceLimiters, error) {
+	log := logger.WithName("identity")
+	log.V(4).Info("Creating an AWS Session")
+
+	resolver := func(service, region string, optFns ...func(*endpoints.Options)) (endpoints.ResolvedEndpoint, error) {
+		for _, s := range endpoint {
+			if service == s.ServiceID {
+				return endpoints.ResolvedEndpoint{
+					URL:           s.URL,
+					SigningRegion: s.SigningRegion,
+				}, nil
+			}
+		}
+		return endpoints.DefaultResolver().EndpointFor(service, region, optFns...)
+	}
+
+	providers, err := getProvidersForCluster(context.Background(), k8sClient, awsCluster, log)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "Failed to get providers for cluster")
+
+	}
+
+	isChanged := false
+	awsProviders := make([]credentials.Provider, len(providers))
+	for i, provider := range providers {
+		// load an existing matching providers from the cache if such a providers exists
+		providerHash, err := provider.Hash()
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "Failed to calculate provider hash.")
+		}
+		cachedProvider, ok := providerCache.Load(providerHash)
+		if ok {
+			provider = cachedProvider.(AWSPrincipalTypeProvider)
+		} else {
+			isChanged = true
+			// add this providers to the cache
+			providerCache.Store(providerHash, provider)
+			// TODO: Remove old provider from cache
+		}
+		awsProviders[i] = provider.(credentials.Provider)
+	}
+
+	if !isChanged {
+		if s, ok := sessionCache.Load(getSessionName(region, awsCluster)); ok {
+			entry := s.(*sessionCacheEntry)
+			return entry.session, entry.serviceLimiters, nil
+		}
+	}
+	awsConfig := &aws.Config{
+		Region:           aws.String(region),
+		EndpointResolver: endpoints.ResolverFunc(resolver),
+	}
+
+	if len(providers) > 0 {
+		// Check if principal credentials can be retrieved. One reason this will fail is that source principal is not authorized for assume role.
+		_, err := providers[0].Retrieve()
+		if err != nil {
+			conditions.MarkFalse(awsCluster, infrav1.PrincipalCredentialRetrievedCondition, infrav1.PrincipalCredentialRetrievalFailedReason, clusterv1.ConditionSeverityError, err.Error())
+			return nil, nil, errors.Wrap(err, "Failed to retrieve principal credentials")
+		}
+		awsConfig = awsConfig.WithCredentials(credentials.NewChainCredentials(awsProviders))
+	}
+
+	conditions.MarkTrue(awsCluster, infrav1.PrincipalCredentialRetrievedCondition)
+
+	ns, err := session.NewSession(awsConfig)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "Failed to create a new AWS session")
+	}
+	sl := newServiceLimiters()
+	sessionCache.Store(getSessionName(region, awsCluster), &sessionCacheEntry{
+		session:         ns,
+		serviceLimiters: sl,
+	})
+
+	return ns, sl, nil
+}
+
+func getSessionName(region string, cluster *infrav1.AWSCluster) string{
+	return fmt.Sprintf("%s-%s-%s", region, cluster.Name, cluster.Namespace)
 }
 
 func newServiceLimiters() throttle.ServiceLimiters {
@@ -172,22 +228,36 @@ func newEC2ServiceLimiter() *throttle.ServiceLimiter {
 	}
 }
 
-func buildProvidersForRef(ctx context.Context, providers []AWSPrincipalTypeProvider, k8sClient client.Client, awsCluster *infrav1.AWSCluster, ref *corev1.ObjectReference, awsConfig *aws.Config, log logr.Logger) ([]AWSPrincipalTypeProvider, error) {
+func buildProvidersForRef(ctx context.Context, providers []AWSPrincipalTypeProvider, k8sClient client.Client, awsCluster *infrav1.AWSCluster, ref *corev1.ObjectReference, log logr.Logger) ([]AWSPrincipalTypeProvider, error) {
 	if ref == nil {
 		log.V(4).Info("AWSCluster does not have a PrincipalRef specified")
 		return providers, nil
 	}
 
-	// if the namespace isn't specified then assume it's in the same namespace as the AWSCluster
-	namespace := ref.Namespace
-	if namespace == "" {
-		namespace = awsCluster.Namespace
-	}
-
 	var provider AWSPrincipalTypeProvider
-	principalObjectKey := client.ObjectKey{Name: ref.Name, Namespace: namespace}
+	principalObjectKey := client.ObjectKey{Name: ref.Name}
 	log.V(4).Info("Get Principal", "Key", principalObjectKey)
 	switch ref.Kind {
+	case "AWSClusterControllerPrincipal":
+		principal := &infrav1.AWSClusterControllerPrincipal{}
+		principal.Kind = "AWSClusterControllerPrincipal"
+
+		err := k8sClient.Get(ctx, client.ObjectKey{Name: ref.Name}, principal)
+		if err != nil {
+			return providers, err
+		}
+
+		if !clusterIsPermittedToUsePrincipal(principal.Spec.AllowedNamespaces, awsCluster.Namespace) {
+			if awsCluster.Spec.PrincipalRef.Name == principal.Name {
+				conditions.MarkFalse(awsCluster, infrav1.PrincipalUsageAllowedCondition, infrav1.PrincipalUsageUnauthorizedReason, clusterv1.ConditionSeverityError, err.Error())
+			} else {
+				conditions.MarkFalse(awsCluster, infrav1.PrincipalUsageAllowedCondition, infrav1.SourcePrincipalUsageUnauthorizedReason, clusterv1.ConditionSeverityError, err.Error())
+			}
+			return providers, errors.Errorf("AWSCluster %s/%s is not permitted to use principal %s", awsCluster.Namespace, awsCluster.Name, principal.Name)
+		}
+
+		// returning empty provider list to default to Controller Principal.
+		return []AWSPrincipalTypeProvider{}, nil
 	case "AWSClusterStaticPrincipal":
 		principal := &infrav1.AWSClusterStaticPrincipal{}
 		err := k8sClient.Get(ctx, principalObjectKey, principal)
@@ -200,42 +270,66 @@ func buildProvidersForRef(ctx context.Context, providers []AWSPrincipalTypeProvi
 			return providers, err
 		}
 		log.V(4).Info("Found an AWSClusterStaticPrincipal", "principal", principal.GetName())
-		if !clusterIsPermittedToUsePrincipal(awsCluster, principal.Spec.AWSClusterPrincipalSpec) {
-			return providers, errors.Errorf("cluster %s%s is not permitted to use principal %s/%s", awsCluster.Namespace, awsCluster.Name, principal.Namespace, principal.Name)
+
+		if !clusterIsPermittedToUsePrincipal(principal.Spec.AllowedNamespaces, awsCluster.Namespace) {
+			if awsCluster.Spec.PrincipalRef.Name == principal.Name {
+				conditions.MarkFalse(awsCluster, infrav1.PrincipalUsageAllowedCondition, infrav1.PrincipalUsageUnauthorizedReason, clusterv1.ConditionSeverityError, err.Error())
+			} else {
+				conditions.MarkFalse(awsCluster, infrav1.PrincipalUsageAllowedCondition, infrav1.SourcePrincipalUsageUnauthorizedReason, clusterv1.ConditionSeverityError, err.Error())
+			}
+			return providers, errors.Errorf("AWSCluster %s/%s is not permitted to use principal %s", awsCluster.Namespace, awsCluster.Name, principal.Name)
 		}
+
 		provider = NewAWSStaticPrincipalTypeProvider(principal, secret)
 		providers = append(providers, provider)
-		if principal.Spec.SourcePrincipalRef != nil {
-			providers, err = buildProvidersForRef(ctx, providers, k8sClient, awsCluster, principal.Spec.SourcePrincipalRef, awsConfig, log)
-			if err != nil {
-				return providers, client.IgnoreNotFound(err)
-			}
-		}
 	case "AWSClusterRolePrincipal":
 		principal := &infrav1.AWSClusterRolePrincipal{}
 		err := k8sClient.Get(ctx, principalObjectKey, principal)
 		if err != nil {
 			return providers, err
 		}
-		log.V(4).Info("Found an AWSClusterRolePrincipal", "principal", principal.GetName())
-		provider = NewAWSRolePrincipalTypeProvider(principal, awsConfig, log)
-		providers = append(providers, provider)
+
+		if !clusterIsPermittedToUsePrincipal(principal.Spec.AllowedNamespaces, awsCluster.Namespace) {
+			if awsCluster.Spec.PrincipalRef.Name == principal.Name {
+				conditions.MarkFalse(awsCluster, infrav1.PrincipalUsageAllowedCondition, infrav1.PrincipalUsageUnauthorizedReason, clusterv1.ConditionSeverityError, err.Error())
+			} else {
+				conditions.MarkFalse(awsCluster, infrav1.PrincipalUsageAllowedCondition, infrav1.SourcePrincipalUsageUnauthorizedReason, clusterv1.ConditionSeverityError, err.Error())
+			}
+			return providers, errors.Errorf("AWSCluster %s/%s is not permitted to use principal %s", awsCluster.Namespace, awsCluster.Name, principal.Name)
+		}
+
+		// TODO: SourcePrincipalRef should always be non-nil, add webhook defaulting.
 		if principal.Spec.SourcePrincipalRef != nil {
-			providers, err = buildProvidersForRef(ctx, providers, k8sClient, awsCluster, principal.Spec.SourcePrincipalRef, awsConfig, log)
+			providers, err = buildProvidersForRef(ctx, providers, k8sClient, awsCluster, principal.Spec.SourcePrincipalRef, log)
 			if err != nil {
-				return providers, client.IgnoreNotFound(err)
+				return providers, err
 			}
 		}
+		var sourceProvider AWSPrincipalTypeProvider
+		if len(providers) > 0 {
+			sourceProvider = providers[len(providers)-1]
+			// Remove last provider
+			if len(providers) > 0 {
+				providers = providers[:len(providers)-1]
+			}
+		}
+		log.V(4).Info("Found an AWSClusterRolePrincipal", "principal", principal.GetName())
+		if sourceProvider != nil {
+			provider = NewAWSRolePrincipalTypeProvider(principal, &sourceProvider, log)
+		} else {
+			provider = NewAWSRolePrincipalTypeProvider(principal, nil, log)
+		}
+		providers = append(providers, provider)
 	default:
 		return providers, errors.Errorf("No such provider known: '%s'", ref.Kind)
 	}
-
+	conditions.MarkTrue(awsCluster, infrav1.PrincipalUsageAllowedCondition)
 	return providers, nil
 }
 
-func getProvidersForCluster(ctx context.Context, k8sClient client.Client, awsCluster *infrav1.AWSCluster, awsConfig *aws.Config, log logr.Logger) ([]AWSPrincipalTypeProvider, error) {
+func getProvidersForCluster(ctx context.Context, k8sClient client.Client, awsCluster *infrav1.AWSCluster, log logr.Logger) ([]AWSPrincipalTypeProvider, error) {
 	providers := make([]AWSPrincipalTypeProvider, 0)
-	providers, err := buildProvidersForRef(ctx, providers, k8sClient, awsCluster, awsCluster.Spec.PrincipalRef, awsConfig, log)
+	providers, err := buildProvidersForRef(ctx, providers, k8sClient, awsCluster, awsCluster.Spec.PrincipalRef, log)
 	if err != nil {
 		return nil, err
 	}
@@ -243,17 +337,22 @@ func getProvidersForCluster(ctx context.Context, k8sClient client.Client, awsClu
 	return providers, nil
 }
 
-func clusterIsPermittedToUsePrincipal(awsCluster *infrav1.AWSCluster, principalSpec infrav1.AWSClusterPrincipalSpec) bool {
-	// TODO (andrewmy):
-	// https://github.com/randomvariable/cluster-api-provider-aws/blob/2f7b382b70ccbf7c2b4b56f9a14227c5b422b698/docs/proposal/20200506-single-controller-multitenancy.md#implementation-detailsnotesconstraints
-	// AllowedNamespaces is a selector of namespaces that AWSClusters can
-	// use this ClusterPrincipal from. This is a standard Kubernetes LabelSelector,
-	// a label query over a set of resources. The result of matchLabels and
-	// matchExpressions are ANDed. Controllers must not support AWSClusters in
-	// namespaces outside this selector.
-	//
-	// An empty selector (default) indicates that AWSClusters can use this
-	// AWSClusterPrincipal from any namespace. This field is intentionally not a
-	// pointer because the nil behavior (no namespaces) is undesirable here.
-	return true
+func clusterIsPermittedToUsePrincipal(allowedNs *infrav1.AllowedNamespacesList, ns string) bool {
+	// nil value does not match with any namespaces
+	if allowedNs == nil {
+		return false
+	}
+
+	// empty value matches with all namespaces
+	if len(allowedNs.NamespacesList) == 0 {
+		return true
+	}
+
+	for _, v := range (*allowedNs).NamespacesList {
+		if v == ns {
+			return true
+		}
+	}
+
+	return false
 }

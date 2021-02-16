@@ -87,6 +87,7 @@ func Node1BeforeSuite(e2eCtx *E2EContext) []byte {
 	Expect(err).NotTo(HaveOccurred())
 	e2eCtx.AWSSession = NewAWSSession()
 	boostrapTemplate := getBootstrapTemplate(e2eCtx)
+	e2eCtx.CloudFormationTemplate = renderCloudFormationStack(boostrapTemplate)
 	if !e2eCtx.Settings.SkipCloudFormationCreation {
 		createCloudFormationStack(e2eCtx.AWSSession, boostrapTemplate)
 	}
