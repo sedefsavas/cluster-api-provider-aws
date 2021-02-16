@@ -18,6 +18,7 @@ package v1alpha3
 
 import (
 	"fmt"
+	corev1 "k8s.io/api/core/v1"
 	"reflect"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -104,5 +105,10 @@ func (r *AWSCluster) ValidateUpdate(old runtime.Object) error {
 func (r *AWSCluster) Default() {
 	SetDefaults_Bastion(&r.Spec.Bastion)
 	SetDefaults_NetworkSpec(&r.Spec.NetworkSpec)
-	SetDefaults_PrincipalRef(r.Spec.PrincipalRef)
+
+	if r.Spec.PrincipalRef == nil {
+		r.Spec.PrincipalRef = &corev1.ObjectReference{
+			Name: AWSClusterControllerPrincipalName,
+		}
+	}
 }

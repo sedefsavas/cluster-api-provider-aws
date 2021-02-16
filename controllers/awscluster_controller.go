@@ -98,17 +98,21 @@ func (r *AWSClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result, reter
 
 	log = log.WithValues("cluster", cluster.Name)
 	helper, err := patch.NewHelper(awsCluster, r.Client)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "failed to init patch helper")
+	}
 
 	defer func() {
-		fmt.Println("xx pathing xx")
-			e := helper.Patch(
-				context.TODO(),
-				awsCluster,
-				patch.WithOwnedConditions{Conditions: []clusterv1.ConditionType{
-					infrav1.PrincipalCredentialRetrievedCondition,
-					infrav1.PrincipalUsageAllowedCondition,
-				}})
-			if e != nil{fmt.Println(e.Error())}
+		e := helper.Patch(
+			context.TODO(),
+			awsCluster,
+			patch.WithOwnedConditions{Conditions: []clusterv1.ConditionType{
+				infrav1.PrincipalCredentialRetrievedCondition,
+				infrav1.PrincipalUsageAllowedCondition,
+			}})
+		if e != nil {
+			fmt.Println(e.Error())
+		}
 	}()
 
 	// Create the scope.

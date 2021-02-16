@@ -33,7 +33,7 @@ func NewAWSControllerPrincipalTypeProvider() *AWSControllerPrincipalTypeProvider
 		credentials:     credentials.NewStaticCredentials(creds.AccessKeyID, creds.SecretAccessKey, creds.SessionToken),
 		accessKeyID:     creds.AccessKeyID,
 		secretAccessKey: creds.SecretAccessKey,
-		sessionToken:     creds.SessionToken,
+		sessionToken:    creds.SessionToken,
 	}
 }
 
@@ -44,6 +44,7 @@ type AWSControllerPrincipalTypeProvider struct {
 	secretAccessKey string
 	sessionToken    string
 }
+
 func (p *AWSControllerPrincipalTypeProvider) Retrieve() (credentials.Value, error) {
 	return p.credentials.Get()
 }
@@ -95,10 +96,10 @@ func GetAssumeRoleCredentials(principal *infrav1.AWSClusterRolePrincipal, awsCon
 
 func NewAWSRolePrincipalTypeProvider(principal *infrav1.AWSClusterRolePrincipal, sourceProvider *AWSPrincipalTypeProvider, log logr.Logger) *AWSRolePrincipalTypeProvider {
 	return &AWSRolePrincipalTypeProvider{
-		credentials: nil,
-		Principal:   principal,
+		credentials:    nil,
+		Principal:      principal,
 		sourceProvider: sourceProvider,
-		log:         log.WithName("AWSRolePrincipalTypeProvider"),
+		log:            log.WithName("AWSRolePrincipalTypeProvider"),
 	}
 }
 
@@ -131,11 +132,10 @@ func (p *AWSStaticPrincipalTypeProvider) IsExpired() bool {
 }
 
 type AWSRolePrincipalTypeProvider struct {
-	Principal   *infrav1.AWSClusterRolePrincipal
-	credentials *credentials.Credentials
+	Principal      *infrav1.AWSClusterRolePrincipal
+	credentials    *credentials.Credentials
 	sourceProvider *AWSPrincipalTypeProvider
-	log         logr.Logger
-	name string
+	log            logr.Logger
 }
 
 func (p *AWSRolePrincipalTypeProvider) Hash() (string, error) {
@@ -152,7 +152,7 @@ func (p *AWSRolePrincipalTypeProvider) Name() string {
 	return p.Principal.Name
 }
 func (p *AWSRolePrincipalTypeProvider) Retrieve() (credentials.Value, error) {
-	if p.credentials == nil || p.IsExpired(){
+	if p.credentials == nil || p.IsExpired() {
 		awsConfig := aws.NewConfig()
 		if p.sourceProvider != nil {
 			sourceCreds, err := (*p.sourceProvider).Retrieve()

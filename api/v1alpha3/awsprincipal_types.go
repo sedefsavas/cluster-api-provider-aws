@@ -26,7 +26,7 @@ type AWSClusterPrincipalSpec struct {
 	AllowedNamespaces *AllowedNamespacesList `json:"allowedNamespaces"`
 }
 
-type  AllowedNamespacesList struct {
+type AllowedNamespacesList struct {
 	NamespacesList []string `json:"list"`
 }
 

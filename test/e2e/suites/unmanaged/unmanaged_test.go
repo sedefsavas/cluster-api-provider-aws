@@ -21,18 +21,9 @@ package unmanaged
 import (
 	"context"
 	"fmt"
-	cfn "github.com/aws/aws-sdk-go/service/cloudformation"
-	"github.com/aws/aws-sdk-go/service/iam"
-	"github.com/aws/aws-sdk-go/service/iam/iamiface"
-	cfn_iam "github.com/awslabs/goformation/v4/cloudformation/iam"
-	"github.com/pkg/errors"
 	"os"
 	"path/filepath"
 	"regexp"
-	cmdbootstrapv1 "sigs.k8s.io/cluster-api-provider-aws/cmd/clusterawsadm/api/bootstrap/v1alpha1"
-	apiiam "sigs.k8s.io/cluster-api-provider-aws/cmd/clusterawsadm/api/iam/v1alpha1"
-	cfn_bootstrap "sigs.k8s.io/cluster-api-provider-aws/cmd/clusterawsadm/cloudformation/bootstrap"
-	"sigs.k8s.io/cluster-api-provider-aws/cmd/clusterawsadm/converters"
 	"strconv"
 	"strings"
 	"time"
@@ -40,13 +31,16 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	client_runtime"sigs.k8s.io/controller-runtime/pkg/client"
-
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/client"
+	cfn "github.com/aws/aws-sdk-go/service/cloudformation"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/elb"
+	"github.com/aws/aws-sdk-go/service/iam"
+	"github.com/aws/aws-sdk-go/service/iam/iamiface"
+	cfn_iam "github.com/awslabs/goformation/v4/cloudformation/iam"
+	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
@@ -55,6 +49,10 @@ import (
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/pointer"
 	infrav1 "sigs.k8s.io/cluster-api-provider-aws/api/v1alpha3"
+	cmdbootstrapv1 "sigs.k8s.io/cluster-api-provider-aws/cmd/clusterawsadm/api/bootstrap/v1alpha1"
+	apiiam "sigs.k8s.io/cluster-api-provider-aws/cmd/clusterawsadm/api/iam/v1alpha1"
+	cfn_bootstrap "sigs.k8s.io/cluster-api-provider-aws/cmd/clusterawsadm/cloudformation/bootstrap"
+	"sigs.k8s.io/cluster-api-provider-aws/cmd/clusterawsadm/converters"
 	"sigs.k8s.io/cluster-api-provider-aws/test/e2e/shared"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
 	bootstrapv1 "sigs.k8s.io/cluster-api/bootstrap/kubeadm/api/v1alpha3"
@@ -62,6 +60,7 @@ import (
 	"sigs.k8s.io/cluster-api/test/framework"
 	"sigs.k8s.io/cluster-api/test/framework/clusterctl"
 	"sigs.k8s.io/cluster-api/util"
+	client_runtime "sigs.k8s.io/controller-runtime/pkg/client"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -122,11 +121,6 @@ var _ = Describe("functional tests - unmanaged", func() {
 			// Change trusted entity and disallow bootstrap user to assume this role.
 			addToCloudformationStack(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyRoleName), aws.StringValue(assumedNestedRole.Role.Arn))
 
-			//iamSvc.UpdateAssumeRolePolicy(&iam.UpdateAssumeRolePolicyInput{
-			//	PolicyDocument: aws.String(trustRelationshipJSON),
-			//	RoleName:       assumedRole.Role.RoleName,
-			//})
-
 			time.Sleep(10 * time.Second)
 
 			By("Creating cluster with assumed role principal")
@@ -147,17 +141,17 @@ var _ = Describe("functional tests - unmanaged", func() {
 			Expect(e2eCtx.Environment.BootstrapClusterProxy.Apply(ctx, workloadClusterTemplate)).ShouldNot(HaveOccurred())
 
 			By("Checking cluster gets provisioned when resources available")
-				Eventually(func() bool {
-					awsCluster, err := GetAWSClusterByName(ctx, namespace.Name, clusterName)
-					if  err == nil {
-						for _, c := range awsCluster.Status.Conditions {
-							if c.Type == infrav1.PrincipalCredentialRetrievedCondition && c.Status == corev1.ConditionFalse {
-								return true
-							}
+			Eventually(func() bool {
+				awsCluster, err := GetAWSClusterByName(ctx, namespace.Name, clusterName)
+				if err == nil {
+					for _, c := range awsCluster.Status.Conditions {
+						if c.Type == infrav1.PrincipalCredentialRetrievedCondition && c.Status == corev1.ConditionFalse {
+							return true
 						}
 					}
-					return false
-				},30*time.Second , 1*time.Second).Should(BeTrue())
+				}
+				return false
+			}, 30*time.Second, 1*time.Second).Should(BeTrue())
 			By("PASSED!")
 		})
 
@@ -1222,7 +1216,7 @@ func addToCloudformationStack(roleName string, trustedPrincipalARN string) {
 	yaml, err := e2eCtx.CloudFormationTemplate.YAML()
 	Expect(err).NotTo(HaveOccurred())
 	processedYaml := string(yaml)
-	if processedYaml == processedYaml1{
+	if processedYaml == processedYaml1 {
 		return
 	}
 	cfnSvc := cfn.New(e2eCtx.AWSSession)
@@ -1250,9 +1244,6 @@ func addToCloudformationStack(roleName string, trustedPrincipalARN string) {
 	Expect(err).NotTo(HaveOccurred())
 }
 
-//policies := []*string{
-//aws.String("arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"),
-//}
 func attachIAMRolePolicy(IAMSvc iamiface.IAMAPI, roleName string, policyARN string) error {
 	IAMSvc.GetPolicy(&iam.GetPolicyInput{})
 	input := &iam.AttachRolePolicyInput{
@@ -1285,22 +1276,3 @@ func PrincipalAWSTrustRelationship(principalARN string) *apiiam.PolicyDocument {
 	}
 	return policy
 }
-
-//// WaitForDeploymentsAvailable waits until the Deployment has status.Available = True, that signals that
-//// all the desired replicas are in place.
-//// This can be used to check if Cluster API controllers installed in the management cluster are working.
-//func WaitForDeploymentsAvailable(ctx context.Context, input WaitForDeploymentsAvailableInput, intervals ...interface{}) {
-//	namespace, name := input.Deployment.GetNamespace(), input.Deployment.GetName()
-//	Byf("waiting for deployment %s/%s to be available", namespace, name)
-//	Eventually(func() bool {
-//		key := client.ObjectKey{Namespace: namespace, Name: name}
-//		if err := input.Getter.Get(ctx, key, input.Deployment); err == nil {
-//			for _, c := range input.Deployment.Status.Conditions {
-//				if c.Type == appsv1.DeploymentAvailable && c.Status == corev1.ConditionTrue {
-//					return true
-//				}
-//			}
-//		}
-//		return false
-//	}, intervals...).Should(BeTrue(), func() string { return DescribeFailedDeployment(input) })
-//}

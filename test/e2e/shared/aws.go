@@ -84,8 +84,8 @@ func renderCloudFormationStack(t *cfn_bootstrap.Template) *go_cfn.Template {
 	return t.RenderCloudFormation()
 }
 
-// CreateCloudFormationStack ensures the cloudformation stack is up to date
-func CreateCloudFormationStack(prov client.ConfigProvider, t *cfn_bootstrap.Template){
+// createCloudFormationStack ensures the cloudformation stack is up to date
+func createCloudFormationStack(prov client.ConfigProvider, t *cfn_bootstrap.Template){
 	Byf("Creating AWS CloudFormation stack for AWS IAM resources: stack-name=%s", t.Spec.StackName)
 	cfnSvc := cloudformation.NewService(cfn.New(prov))
 
