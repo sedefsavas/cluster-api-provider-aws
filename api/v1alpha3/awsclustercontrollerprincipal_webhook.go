@@ -17,6 +17,11 @@ limitations under the License.
 package v1alpha3
 
 import (
+	"fmt"
+	"reflect"
+
+	"github.com/pkg/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -49,42 +54,14 @@ func (r *AWSClusterControllerPrincipal) ValidateDelete() error {
 }
 
 func (r *AWSClusterControllerPrincipal) ValidateUpdate(old runtime.Object) error {
+	oldP, ok := old.(*AWSClusterControllerPrincipal)
+	if !ok {
+		return apierrors.NewBadRequest(fmt.Sprintf("expected an AWSClusterControllerPrincipal but got a %T", old))
+	}
+	if !reflect.DeepEqual(r.Spec, oldP.Spec) {
+		return errors.New("AWSClusterControllerPrincipal is immutable")
+	}
 	return nil
-	//var allErrs field.ErrorList
-	//
-	//oldP, ok := old.(*AWSClusterControllerPrincipal)
-	//if !ok {
-	//	return apierrors.NewBadRequest(fmt.Sprintf("expected an AWSClusterControllerPrincipal but got a %T", old))
-	//}
-	//
-	//// Validate selector parses as Selector
-	//selector, err := v1.LabelSelectorAsSelector(&r.Spec.AllowedNamespaces)
-	//if err != nil {
-	//	allErrs = append(
-	//		allErrs,
-	//		field.Invalid(field.NewPath("spec", "allowedNamespaces"), r.Spec.AllowedNamespaces, err.Error()),
-	//	)
-	//}
-	//
-	//// Validate selector parses as Selector
-	//oldSelector, err := v1.LabelSelectorAsSelector(&oldP.Spec.AllowedNamespaces)
-	//if err != nil {
-	//	allErrs = append(
-	//		allErrs,
-	//		field.Invalid(field.NewPath("spec", "allowedNamespaces"), r.Spec.AllowedNamespaces, err.Error()),
-	//	)
-	//}
-	//
-	//// Validate that the selector isn't empty.
-	//// Only allow updates if existing spec.AllowedNamespaces includes all namespaces to avoid increasing permissions accidentally during upgrade.
-	//if selector != nil && !selector.Empty() && !reflect.DeepEqual(selector, oldSelector) {
-	//	allErrs = append(
-	//		allErrs,
-	//		field.Invalid(field.NewPath("spec", "allowedNamespaces"), r.Spec.AllowedNamespaces, "allowedNamespaces must be empty to be updated"),
-	//	)
-	//}
-	//
-	//return aggregateObjErrors(r.GroupVersionKind().GroupKind(), r.Name, allErrs)
 }
 
 func (r *AWSClusterControllerPrincipal) Default() {
