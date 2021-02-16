@@ -118,6 +118,9 @@ between organizations needs to be secured, and issues such as confused deputy sc
 Because a single deployment of the CAPA operator may reconcile many different clusters in its lifetime, it is necessary
 to modify the CAPA operator to scope its AWS client instances to within the reconciliation process.
 
+It follows that an organization may wish to provision control planes and worker groups in separate accounts (including
+each worker group in a separate account). There is a desire to support this configuration also.
+
 AWS provides a number of mechanisms for assume roles across account boundaries:
 
 * Role assumption using credentials provided in environment variables
