@@ -214,10 +214,10 @@ generate: ## Generate code
 
 .PHONY: generate-go
 generate-go: $(MOCKGEN)
-	#go generate ./...
+	go generate ./...
 	$(MAKE) generate-go-core
-#	$(MAKE) generate-go-eks-bootstrap
-#	$(MAKE) generate-go-eks-controlplane
+	$(MAKE) generate-go-eks-bootstrap
+	$(MAKE) generate-go-eks-controlplane
 
 .PHONY: generate-go-core
 generate-go-core: ## Runs Go related generate targets
@@ -256,8 +256,8 @@ generate-go-eks-controlplane: $(CONTROLLER_GEN) $(CONVERSION_GEN)
 .PHONY: generate-manifests
 generate-manifests:
 	$(MAKE) generate-core-manifests
-#	$(MAKE) generate-eks-bootstrap-manifests
-#	$(MAKE) generate-eks-controlplane-manifests
+	$(MAKE) generate-eks-bootstrap-manifests
+	$(MAKE) generate-eks-controlplane-manifests
 
 .PHONY: generate-core-manifests
 generate-core-manifests:$(CONTROLLER_GEN) ## Generate manifests e.g. CRD, RBAC etc.

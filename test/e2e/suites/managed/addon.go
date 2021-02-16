@@ -1,3 +1,4 @@
+// +build e2e
 
 /*
 Copyright 2021 The Kubernetes Authors.
