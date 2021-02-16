@@ -78,6 +78,7 @@ rules:
 - apiGroups:
   - infrastructure.cluster.x-k8s.io
   resources:
+  - awsclustercontrollerprincipals
   - awsclusterroleprincipals
   - awsclusterstaticprincipals
   verbs:

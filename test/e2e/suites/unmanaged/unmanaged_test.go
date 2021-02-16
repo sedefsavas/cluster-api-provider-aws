@@ -23,7 +23,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sigs.k8s.io/cluster-api-provider-aws/exp/instancestate"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -34,8 +34,13 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/client"
+	cfn "github.com/aws/aws-sdk-go/service/cloudformation"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/elb"
+	"github.com/aws/aws-sdk-go/service/iam"
+	"github.com/aws/aws-sdk-go/service/iam/iamiface"
+	cfn_iam "github.com/awslabs/goformation/v4/cloudformation/iam"
+	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
@@ -44,6 +49,10 @@ import (
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/pointer"
 	infrav1 "sigs.k8s.io/cluster-api-provider-aws/api/v1alpha3"
+	cmdbootstrapv1 "sigs.k8s.io/cluster-api-provider-aws/cmd/clusterawsadm/api/bootstrap/v1alpha1"
+	apiiam "sigs.k8s.io/cluster-api-provider-aws/cmd/clusterawsadm/api/iam/v1alpha1"
+	cfn_bootstrap "sigs.k8s.io/cluster-api-provider-aws/cmd/clusterawsadm/cloudformation/bootstrap"
+	"sigs.k8s.io/cluster-api-provider-aws/cmd/clusterawsadm/converters"
 	"sigs.k8s.io/cluster-api-provider-aws/test/e2e/shared"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
 	bootstrapv1 "sigs.k8s.io/cluster-api/bootstrap/kubeadm/api/v1alpha3"
@@ -51,6 +60,7 @@ import (
 	"sigs.k8s.io/cluster-api/test/framework"
 	"sigs.k8s.io/cluster-api/test/framework/clusterctl"
 	"sigs.k8s.io/cluster-api/util"
+	client_runtime "sigs.k8s.io/controller-runtime/pkg/client"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -85,6 +95,154 @@ var _ = Describe("functional tests - unmanaged", func() {
 		namespace = shared.SetupSpecNamespace(ctx, specName, e2eCtx)
 		Expect(e2eCtx.E2EConfig).ToNot(BeNil(), "Invalid argument. e2eConfig can't be nil when calling %s spec", specName)
 		Expect(e2eCtx.E2EConfig.Variables).To(HaveKey(shared.KubernetesVersion))
+	})
+	Describe("Multitenancy test", func() {
+		It("should fail creating cluster if assumer is not in trusted entity policy", func() {
+			By("Creating cluster")
+			iamSvc := iam.New(e2eCtx.AWSSession)
+
+			// Create role that cannot be assumed by the bootstrap user
+			// Create a role that can be assumed by the bootstrap user.
+			bootstrapUser, err := iamSvc.GetUser(&iam.GetUserInput{UserName: aws.String(cmdbootstrapv1.DefaultBootstrapUserName)})
+			Expect(err).ShouldNot(HaveOccurred())
+			addToCloudformationStack(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyRoleName), aws.StringValue(bootstrapUser.User.Arn))
+
+			assumedRole, err := iamSvc.GetRole(&iam.GetRoleInput{RoleName: aws.String(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyRoleName))})
+			Expect(err).ShouldNot(HaveOccurred())
+			shared.SetEnvVar(shared.MultiTenancyRoleARN, aws.StringValue(assumedRole.Role.Arn), false)
+			shared.SetEnvVar(shared.MultiTenancyPrincipalName, e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyRoleName), false)
+
+			addToCloudformationStack(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyNestedRoleName), aws.StringValue(assumedRole.Role.Arn))
+			assumedNestedRole, err := iamSvc.GetRole(&iam.GetRoleInput{RoleName: aws.String(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyNestedRoleName))})
+			shared.SetEnvVar(shared.MultiTenancNestedyRoleARN, aws.StringValue(assumedNestedRole.Role.Arn), false)
+			//trustRelationshipJSON, err := converters.IAMPolicyDocumentToJSON(*PrincipalAWSTrustRelationship(aws.StringValue(assumedNestedRole.Role.Arn)))
+			//Expect(err).NotTo(HaveOccurred())
+
+			// Change trusted entity and disallow bootstrap user to assume this role.
+			addToCloudformationStack(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyRoleName), aws.StringValue(assumedNestedRole.Role.Arn))
+
+			time.Sleep(10 * time.Second)
+
+			By("Creating cluster with assumed role principal")
+
+			clusterName := fmt.Sprintf("cluster-%s", util.RandomString(6))
+			workloadClusterTemplate := clusterctl.ConfigCluster(ctx, clusterctl.ConfigClusterInput{
+				LogFolder:                filepath.Join(e2eCtx.Settings.ArtifactFolder, "clusters", e2eCtx.Environment.BootstrapClusterProxy.GetName()),
+				ClusterctlConfigPath:     e2eCtx.Environment.ClusterctlConfigPath,
+				KubeconfigPath:           e2eCtx.Environment.BootstrapClusterProxy.GetKubeconfigPath(),
+				InfrastructureProvider:   clusterctl.DefaultInfrastructureProvider,
+				Flavor:                   shared.MultitenancyFlavor,
+				Namespace:                namespace.Name,
+				ClusterName:              clusterName,
+				KubernetesVersion:        e2eCtx.E2EConfig.GetVariable(shared.KubernetesVersion),
+				ControlPlaneMachineCount: pointer.Int64Ptr(1),
+				WorkerMachineCount:       pointer.Int64Ptr(0),
+			})
+			Expect(e2eCtx.Environment.BootstrapClusterProxy.Apply(ctx, workloadClusterTemplate)).ShouldNot(HaveOccurred())
+
+			By("Checking cluster gets provisioned when resources available")
+			Eventually(func() bool {
+				awsCluster, err := GetAWSClusterByName(ctx, namespace.Name, clusterName)
+				if err == nil {
+					for _, c := range awsCluster.Status.Conditions {
+						if c.Type == infrav1.PrincipalCredentialRetrievedCondition && c.Status == corev1.ConditionFalse {
+							return true
+						}
+					}
+				}
+				return false
+			}, 30*time.Second, 1*time.Second).Should(BeTrue())
+			By("PASSED!")
+		})
+
+		It("should create cluster with assumed role", func() {
+			By("Creating cluster")
+			iamSvc := iam.New(e2eCtx.AWSSession)
+			// Create a role that can be assumed by the bootstrap user.
+			bootstrapUser, err := iamSvc.GetUser(&iam.GetUserInput{UserName: aws.String(cmdbootstrapv1.DefaultBootstrapUserName)})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			addToCloudformationStack(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyRoleName), aws.StringValue(bootstrapUser.User.Arn))
+
+			assumedRole, err := iamSvc.GetRole(&iam.GetRoleInput{RoleName: aws.String(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyRoleName))})
+			Expect(err).ShouldNot(HaveOccurred())
+			shared.SetEnvVar(shared.MultiTenancyRoleARN, aws.StringValue(assumedRole.Role.Arn), false)
+			shared.SetEnvVar(shared.MultiTenancyPrincipalName, e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyRoleName), false)
+			attachControllerPolicyToRole(aws.StringValue(assumedRole.Role.RoleName))
+			time.Sleep(10 * time.Second)
+
+			addToCloudformationStack(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyNestedRoleName), aws.StringValue(assumedRole.Role.Arn))
+			assumedNestedRole, err := iamSvc.GetRole(&iam.GetRoleInput{RoleName: aws.String(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyNestedRoleName))})
+			shared.SetEnvVar(shared.MultiTenancNestedyRoleARN, aws.StringValue(assumedNestedRole.Role.Arn), false)
+			attachControllerPolicyToRole(aws.StringValue(assumedNestedRole.Role.RoleName))
+
+			By("Creating cluster with assumed role principal")
+
+			clusterName := fmt.Sprintf("cluster-%s", util.RandomString(6))
+			clusterctl.ApplyClusterTemplateAndWait(ctx, clusterctl.ApplyClusterTemplateAndWaitInput{
+				ClusterProxy: e2eCtx.Environment.BootstrapClusterProxy,
+				ConfigCluster: clusterctl.ConfigClusterInput{
+					LogFolder:                filepath.Join(e2eCtx.Settings.ArtifactFolder, "clusters", e2eCtx.Environment.BootstrapClusterProxy.GetName()),
+					ClusterctlConfigPath:     e2eCtx.Environment.ClusterctlConfigPath,
+					KubeconfigPath:           e2eCtx.Environment.BootstrapClusterProxy.GetKubeconfigPath(),
+					InfrastructureProvider:   clusterctl.DefaultInfrastructureProvider,
+					Flavor:                   shared.MultitenancyFlavor,
+					Namespace:                namespace.Name,
+					ClusterName:              clusterName,
+					KubernetesVersion:        e2eCtx.E2EConfig.GetVariable(shared.KubernetesVersion),
+					ControlPlaneMachineCount: pointer.Int64Ptr(1),
+					WorkerMachineCount:       pointer.Int64Ptr(0),
+				},
+				WaitForClusterIntervals:      e2eCtx.E2EConfig.GetIntervals(specName, "wait-cluster"),
+				WaitForControlPlaneIntervals: e2eCtx.E2EConfig.GetIntervals(specName, "wait-control-plane"),
+				WaitForMachineDeployments:    e2eCtx.E2EConfig.GetIntervals(specName, "wait-worker-nodes"),
+			})
+
+			By("PASSED!")
+		})
+		It("should create cluster with nested assumed role", func() {
+			By("Creating cluster")
+			iamSvc := iam.New(e2eCtx.AWSSession)
+			// Create a role that can be assumed by the bootstrap user.
+			bootstrapUser, err := iamSvc.GetUser(&iam.GetUserInput{UserName: aws.String(cmdbootstrapv1.DefaultBootstrapUserName)})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			addToCloudformationStack(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyRoleName), aws.StringValue(bootstrapUser.User.Arn))
+
+			assumedRole, err := iamSvc.GetRole(&iam.GetRoleInput{RoleName: aws.String(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyRoleName))})
+			Expect(err).ShouldNot(HaveOccurred())
+			shared.SetEnvVar(shared.MultiTenancyRoleARN, aws.StringValue(assumedRole.Role.Arn), false)
+			attachControllerPolicyToRole(aws.StringValue(assumedRole.Role.RoleName))
+			time.Sleep(10 * time.Second)
+
+			addToCloudformationStack(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyNestedRoleName), aws.StringValue(assumedRole.Role.Arn))
+			assumedNestedRole, err := iamSvc.GetRole(&iam.GetRoleInput{RoleName: aws.String(e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyNestedRoleName))})
+			shared.SetEnvVar(shared.MultiTenancNestedyRoleARN, aws.StringValue(assumedNestedRole.Role.Arn), false)
+			shared.SetEnvVar(shared.MultiTenancyPrincipalName, e2eCtx.E2EConfig.GetVariable(shared.MultiTenancyNestedRoleName), false)
+			attachControllerPolicyToRole(aws.StringValue(assumedNestedRole.Role.RoleName))
+
+			clusterName := fmt.Sprintf("cluster-%s", util.RandomString(6))
+			clusterctl.ApplyClusterTemplateAndWait(ctx, clusterctl.ApplyClusterTemplateAndWaitInput{
+				ClusterProxy: e2eCtx.Environment.BootstrapClusterProxy,
+				ConfigCluster: clusterctl.ConfigClusterInput{
+					LogFolder:                filepath.Join(e2eCtx.Settings.ArtifactFolder, "clusters", e2eCtx.Environment.BootstrapClusterProxy.GetName()),
+					ClusterctlConfigPath:     e2eCtx.Environment.ClusterctlConfigPath,
+					KubeconfigPath:           e2eCtx.Environment.BootstrapClusterProxy.GetKubeconfigPath(),
+					InfrastructureProvider:   clusterctl.DefaultInfrastructureProvider,
+					Flavor:                   shared.MultitenancyFlavor,
+					Namespace:                namespace.Name,
+					ClusterName:              clusterName,
+					KubernetesVersion:        e2eCtx.E2EConfig.GetVariable(shared.KubernetesVersion),
+					ControlPlaneMachineCount: pointer.Int64Ptr(1),
+					WorkerMachineCount:       pointer.Int64Ptr(0),
+				},
+				WaitForClusterIntervals:      e2eCtx.E2EConfig.GetIntervals(specName, "wait-cluster"),
+				WaitForControlPlaneIntervals: e2eCtx.E2EConfig.GetIntervals(specName, "wait-control-plane"),
+				WaitForMachineDeployments:    e2eCtx.E2EConfig.GetIntervals(specName, "wait-worker-nodes"),
+			})
+
+			By("PASSED!")
+		})
 	})
 
 	Describe("Workload cluster with AWS SSM Parameter as the Secret Backend", func() {
@@ -439,6 +597,17 @@ var _ = Describe("functional tests - unmanaged", func() {
 		shared.DumpSpecResourcesAndCleanup(ctx, "", namespace, e2eCtx)
 	})
 })
+
+// GetClusterByName returns a Cluster object given his name
+func GetAWSClusterByName(ctx context.Context, namespace, name string) (*infrav1.AWSCluster, error) {
+	awsCluster := &infrav1.AWSCluster{}
+	key := client_runtime.ObjectKey{
+		Namespace: namespace,
+		Name:      name,
+	}
+	err := e2eCtx.Environment.BootstrapClusterProxy.GetClient().Get(ctx, key, awsCluster)
+	return awsCluster, err
+}
 
 func createCluster(ctx context.Context, configCluster clusterctl.ConfigClusterInput) (*clusterv1.Cluster, []*clusterv1.MachineDeployment) {
 
@@ -978,4 +1147,132 @@ func waitForStatefulSetRunning(info statefulSetInfo, k8sclient crclient.Client) 
 			return *statefulset.Spec.Replicas == statefulset.Status.ReadyReplicas, nil
 		}, 10*time.Minute, 30*time.Second,
 	).Should(BeTrue())
+}
+
+func attachControllerPolicyToRole(roleName string) {
+	iamSvc := iam.New(e2eCtx.AWSSession)
+	policyList, err := iamSvc.ListPolicies(&iam.ListPoliciesInput{
+		Scope: aws.String(iam.PolicyScopeTypeLocal),
+	})
+	Expect(err).NotTo(HaveOccurred())
+
+	policyARN := ""
+	for _, policy := range policyList.Policies {
+		if aws.StringValue(policy.PolicyName) == e2eCtx.Environment.BootstrapTemplate.NewManagedName("controllers") {
+			policyARN = aws.StringValue(policy.Arn)
+			break
+		}
+	}
+	err = attachIAMRolePolicy(iamSvc, roleName, policyARN)
+	Expect(err).NotTo(HaveOccurred())
+}
+
+func createRole(roleName string, trustedPrincipalARN string, withControllerPolicyAttached bool) string {
+	iamSvc := iam.New(e2eCtx.AWSSession)
+	trustRelationshipJSON, err := converters.IAMPolicyDocumentToJSON(*PrincipalAWSTrustRelationship(trustedPrincipalARN))
+	Expect(err).NotTo(HaveOccurred())
+
+	input := &iam.CreateRoleInput{
+		RoleName:                 aws.String(roleName),
+		AssumeRolePolicyDocument: aws.String(trustRelationshipJSON),
+	}
+	out, err := iamSvc.CreateRole(input)
+	Expect(err).NotTo(HaveOccurred())
+
+	if withControllerPolicyAttached {
+		policyList, err := iamSvc.ListPolicies(&iam.ListPoliciesInput{
+			Scope: aws.String(iam.PolicyScopeTypeLocal),
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		policyARN := ""
+		for _, policy := range policyList.Policies {
+			if aws.StringValue(policy.PolicyName) == e2eCtx.Environment.BootstrapTemplate.NewManagedName("controllers") {
+				policyARN = aws.StringValue(policy.Arn)
+				break
+			}
+		}
+		err = attachIAMRolePolicy(iamSvc, roleName, policyARN)
+		Expect(err).NotTo(HaveOccurred())
+	}
+	return aws.StringValue(out.Role.Arn)
+}
+
+func addToCloudformationStack(roleName string, trustedPrincipalARN string) {
+	trustRelationshipJSON, err := converters.IAMPolicyDocumentToJSON(*cfn_bootstrap.IdentityAssumeRolePolicy(trustedPrincipalARN))
+	Expect(err).NotTo(HaveOccurred())
+	// Make a Regex to say we only want letters and numbers
+	reg, err := regexp.Compile("[^a-zA-Z0-9]+")
+	Expect(err).NotTo(HaveOccurred())
+
+	yaml1, err := e2eCtx.CloudFormationTemplate.YAML()
+	processedYaml1 := string(yaml1)
+	alphaNumericRoleName := reg.ReplaceAllString(roleName, "")
+	e2eCtx.CloudFormationTemplate.Resources[alphaNumericRoleName] = &cfn_iam.Role{
+		RoleName:                 roleName,
+		AssumeRolePolicyDocument: aws.String(trustRelationshipJSON),
+	}
+
+	yaml, err := e2eCtx.CloudFormationTemplate.YAML()
+	Expect(err).NotTo(HaveOccurred())
+	processedYaml := string(yaml)
+	if processedYaml == processedYaml1 {
+		return
+	}
+	cfnSvc := cfn.New(e2eCtx.AWSSession)
+	_, err = cfnSvc.CreateChangeSet(&cfn.CreateChangeSetInput{
+		Capabilities:  []*string{aws.String("CAPABILITY_NAMED_IAM")},
+		ChangeSetName: aws.String("changeset"),
+		TemplateBody:  aws.String(processedYaml),
+		StackName:     aws.String(e2eCtx.Environment.BootstrapTemplate.Spec.StackName),
+	})
+	Expect(err).NotTo(HaveOccurred())
+	cfnSvc.WaitUntilChangeSetCreateComplete(&cfn.DescribeChangeSetInput{
+		ChangeSetName: aws.String("changeset"),
+		StackName:     aws.String(e2eCtx.Environment.BootstrapTemplate.Spec.StackName),
+	})
+	_, err = cfnSvc.ExecuteChangeSet(&cfn.ExecuteChangeSetInput{
+		ChangeSetName:      aws.String("changeset"),
+		ClientRequestToken: nil,
+		StackName:          aws.String(e2eCtx.Environment.BootstrapTemplate.Spec.StackName),
+	})
+	Expect(err).NotTo(HaveOccurred())
+
+	err = cfnSvc.WaitUntilStackUpdateComplete(&cfn.DescribeStacksInput{
+		StackName: aws.String(e2eCtx.Environment.BootstrapTemplate.Spec.StackName),
+	})
+	Expect(err).NotTo(HaveOccurred())
+}
+
+func attachIAMRolePolicy(IAMSvc iamiface.IAMAPI, roleName string, policyARN string) error {
+	IAMSvc.GetPolicy(&iam.GetPolicyInput{})
+	input := &iam.AttachRolePolicyInput{
+		RoleName:  aws.String(roleName),
+		PolicyArn: aws.String(policyARN),
+	}
+	_, err := IAMSvc.AttachRolePolicy(input)
+	if err != nil {
+		return errors.Wrapf(err, "error attaching policy %s to role %s", policyARN, roleName)
+	}
+
+	return nil
+}
+
+func PrincipalAWSTrustRelationship(principalARN string) *apiiam.PolicyDocument {
+	principal := make(apiiam.Principals)
+	principal[apiiam.PrincipalAWS] = []string{principalARN}
+
+	policy := &apiiam.PolicyDocument{
+		Version: "2012-10-17",
+		Statement: []apiiam.StatementEntry{
+			{
+				Effect: "Allow",
+				Action: []string{
+					"sts:AssumeRole",
+				},
+				Principal: principal,
+			},
+		},
+	}
+	return policy
 }

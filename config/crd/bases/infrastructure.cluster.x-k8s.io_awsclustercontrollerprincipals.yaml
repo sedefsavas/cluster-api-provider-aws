@@ -6,22 +6,21 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.2.9
   creationTimestamp: null
-  name: awsclusterstaticprincipals.infrastructure.cluster.x-k8s.io
+  name: awsclustercontrollerprincipals.infrastructure.cluster.x-k8s.io
 spec:
   group: infrastructure.cluster.x-k8s.io
   names:
     categories:
     - cluster-api
-    kind: AWSClusterStaticPrincipal
-    listKind: AWSClusterStaticPrincipalList
-    plural: awsclusterstaticprincipals
-    singular: awsclusterstaticprincipal
+    kind: AWSClusterControllerPrincipal
+    listKind: AWSClusterControllerPrincipalList
+    plural: awsclustercontrollerprincipals
+    singular: awsclustercontrollerprincipal
   scope: Cluster
   versions:
   - name: v1alpha3
     schema:
       openAPIV3Schema:
-        description: AWSClusterStaticPrincipal represents a reference to an AWS access key ID and secret access key, stored in a secret.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
@@ -32,7 +31,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: Spec for this AWSClusterStaticPrincipal.
+            description: Spec for this AWSClusterControllerPrincipal.
             properties:
               allowedNamespaces:
                 properties:
@@ -43,18 +42,6 @@ spec:
                 required:
                 - list
                 type: object
-              secretRef:
-                description: 'Reference to a secret containing the credentials. The secret should contain the following data keys:  AccessKeyID: AKIAIOSFODNN7EXAMPLE  SecretAccessKey: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY  SessionToken: Optional'
-                properties:
-                  name:
-                    description: Name is unique within a namespace to reference a secret resource.
-                    type: string
-                  namespace:
-                    description: Namespace defines the space within which the secret name must be unique.
-                    type: string
-                type: object
-            required:
-            - secretRef
             type: object
         type: object
     served: true

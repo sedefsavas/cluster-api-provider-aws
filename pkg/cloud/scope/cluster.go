@@ -224,6 +224,7 @@ func (s *ClusterScope) PatchObject() error {
 			infrav1.ClusterSecurityGroupsReadyCondition,
 			infrav1.BastionHostReadyCondition,
 			infrav1.LoadBalancerReadyCondition,
+			infrav1.PrincipalUsageAllowedCondition,
 		}})
 }
 
