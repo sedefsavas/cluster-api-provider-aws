@@ -18,8 +18,10 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"reflect"
+	"sigs.k8s.io/cluster-api/util/patch"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -62,7 +64,7 @@ type AWSClusterReconciler struct {
 // +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=awsclusters,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=awsclusters/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=cluster.x-k8s.io,resources=clusters;clusters/status,verbs=get;list;watch
-// +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=awsclusterroleprincipals;awsclusterstaticprincipals,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=awsclusterroleprincipals;awsclusterstaticprincipals;awsclustercontrollerprincipals,verbs=get;list;watch;create;update;patch;delete
 
 func (r *AWSClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result, reterr error) {
 	ctx := context.TODO()
@@ -95,6 +97,23 @@ func (r *AWSClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result, reter
 	}
 
 	log = log.WithValues("cluster", cluster.Name)
+	helper, err := patch.NewHelper(awsCluster, r.Client)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "failed to init patch helper")
+	}
+
+	defer func() {
+		e := helper.Patch(
+			context.TODO(),
+			awsCluster,
+			patch.WithOwnedConditions{Conditions: []clusterv1.ConditionType{
+				infrav1.PrincipalCredentialRetrievedCondition,
+				infrav1.PrincipalUsageAllowedCondition,
+			}})
+		if e != nil {
+			fmt.Println(e.Error())
+		}
+	}()
 
 	// Create the scope.
 	clusterScope, err := scope.NewClusterScope(scope.ClusterScopeParams{

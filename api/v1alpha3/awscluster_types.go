@@ -26,6 +26,9 @@ const (
 	// ClusterFinalizer allows ReconcileAWSCluster to clean up AWS resources associated with AWSCluster before
 	// removing it from the apiserver.
 	ClusterFinalizer = "awscluster.infrastructure.cluster.x-k8s.io"
+
+	// AWSClusterControllerPrincipalName is the name of the AWSClusterControllerPrincipal singleton
+	AWSClusterControllerPrincipalName = "default"
 )
 
 // AWSClusterSpec defines the desired state of AWSCluster

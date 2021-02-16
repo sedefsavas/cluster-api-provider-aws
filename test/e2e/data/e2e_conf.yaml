@@ -109,6 +109,8 @@ providers:
         targetName: "cluster-template-mhc.yaml"
       - sourcePath: "./infrastructure-aws/cluster-template-machine-pool.yaml"
         targetName: "cluster-template-machine-pool.yaml"
+      - sourcePath: "./infrastructure-aws/cluster-template-multitenancy.yaml"
+        targetName: "cluster-template-multitenancy.yaml"
 variables:
   KUBERNETES_VERSION: "v1.20.1"
   CNI: "../../data/cni/calico.yaml"
@@ -125,6 +127,9 @@ variables:
   COREDNS_VERSION_UPGRADE_TO: "1.7.1"
   KUBERNETES_VERSION_UPGRADE_TO: "v1.20.1"
   KUBERNETES_VERSION_UPGRADE_FROM: "v1.19.6"
+  MULTI_TENANCY_USER_NAME: "multi-tenancy-user"
+  MULTI_TENANCY_ROLE_NAME: "multi-tenancy-role"
+  MULTI_TENANCY_NESTED_ROLE_NAME: "multi-tenancy-nested-role"
 
 intervals:
   default/wait-cluster: ["25m", "10s"]
