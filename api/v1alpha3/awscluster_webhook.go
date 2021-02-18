@@ -97,6 +97,14 @@ func (r *AWSCluster) ValidateUpdate(old runtime.Object) error {
 		)
 	}
 
+	// If a principalRef is already set, do not allow removal of it.
+	if oldC.Spec.PrincipalRef != nil && r.Spec.PrincipalRef == nil {
+		allErrs = append(allErrs,
+			field.Invalid(field.NewPath("spec", "principalRef"),
+				r.Spec.PrincipalRef, "field cannot be set to nil"),
+		)
+	}
+
 	allErrs = append(allErrs, r.Spec.Bastion.Validate()...)
 
 	return aggregateObjErrors(r.GroupVersionKind().GroupKind(), r.Name, allErrs)
@@ -108,6 +116,8 @@ func (r *AWSCluster) Default() {
 
 	if r.Spec.PrincipalRef == nil {
 		r.Spec.PrincipalRef = &corev1.ObjectReference{
+			Kind: "AWSClusterControllerPrincipal",
+			APIVersion: GroupVersion.String(),
 			Name: AWSClusterControllerPrincipalName,
 		}
 	}

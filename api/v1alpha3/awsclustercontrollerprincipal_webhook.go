@@ -58,6 +58,7 @@ func (r *AWSClusterControllerPrincipal) ValidateUpdate(old runtime.Object) error
 	if !ok {
 		return apierrors.NewBadRequest(fmt.Sprintf("expected an AWSClusterControllerPrincipal but got a %T", old))
 	}
+
 	if !reflect.DeepEqual(r.Spec, oldP.Spec) {
 		return errors.New("AWSClusterControllerPrincipal is immutable")
 	}

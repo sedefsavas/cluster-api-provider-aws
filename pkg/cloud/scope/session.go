@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright 2020 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -32,6 +32,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	infrav1 "sigs.k8s.io/cluster-api-provider-aws/api/v1alpha3"
 	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud/throttle"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
@@ -165,7 +166,7 @@ func sessionForClusterWithRegion(k8sClient client.Client, awsCluster *infrav1.AW
 	return ns, sl, nil
 }
 
-func getSessionName(region string, cluster *infrav1.AWSCluster) string{
+func getSessionName(region string, cluster *infrav1.AWSCluster) string {
 	return fmt.Sprintf("%s-%s-%s", region, cluster.Name, cluster.Namespace)
 }
 
@@ -246,8 +247,11 @@ func buildProvidersForRef(ctx context.Context, providers []AWSPrincipalTypeProvi
 		if err != nil {
 			return providers, err
 		}
-
-		if !clusterIsPermittedToUsePrincipal(principal.Spec.AllowedNamespaces, awsCluster.Namespace) {
+		canUse, err := IsClusterPermittedToUsePrincipal(k8sClient, principal.Spec.AllowedNamespaces, awsCluster.Namespace)
+		if err != nil {
+			return providers, err
+		}
+		if !canUse {
 			if awsCluster.Spec.PrincipalRef.Name == principal.Name {
 				conditions.MarkFalse(awsCluster, infrav1.PrincipalUsageAllowedCondition, infrav1.PrincipalUsageUnauthorizedReason, clusterv1.ConditionSeverityError, err.Error())
 			} else {
@@ -271,7 +275,11 @@ func buildProvidersForRef(ctx context.Context, providers []AWSPrincipalTypeProvi
 		}
 		log.V(4).Info("Found an AWSClusterStaticPrincipal", "principal", principal.GetName())
 
-		if !clusterIsPermittedToUsePrincipal(principal.Spec.AllowedNamespaces, awsCluster.Namespace) {
+		canUse, err := IsClusterPermittedToUsePrincipal(k8sClient, principal.Spec.AllowedNamespaces, awsCluster.Namespace)
+		if err != nil {
+			return providers, err
+		}
+		if !canUse {
 			if awsCluster.Spec.PrincipalRef.Name == principal.Name {
 				conditions.MarkFalse(awsCluster, infrav1.PrincipalUsageAllowedCondition, infrav1.PrincipalUsageUnauthorizedReason, clusterv1.ConditionSeverityError, err.Error())
 			} else {
@@ -289,7 +297,11 @@ func buildProvidersForRef(ctx context.Context, providers []AWSPrincipalTypeProvi
 			return providers, err
 		}
 
-		if !clusterIsPermittedToUsePrincipal(principal.Spec.AllowedNamespaces, awsCluster.Namespace) {
+		canUse, err := IsClusterPermittedToUsePrincipal(k8sClient, principal.Spec.AllowedNamespaces, awsCluster.Namespace)
+		if err != nil {
+			return providers, err
+		}
+		if !canUse {
 			if awsCluster.Spec.PrincipalRef.Name == principal.Name {
 				conditions.MarkFalse(awsCluster, infrav1.PrincipalUsageAllowedCondition, infrav1.PrincipalUsageUnauthorizedReason, clusterv1.ConditionSeverityError, err.Error())
 			} else {
@@ -337,22 +349,44 @@ func getProvidersForCluster(ctx context.Context, k8sClient client.Client, awsClu
 	return providers, nil
 }
 
-func clusterIsPermittedToUsePrincipal(allowedNs *infrav1.AllowedNamespacesList, ns string) bool {
+func IsClusterPermittedToUsePrincipal(k8sClient client.Client, allowedNs *infrav1.AllowedNamespaces, clusterNamespace string) (bool, error) {
 	// nil value does not match with any namespaces
 	if allowedNs == nil {
-		return false
+		return false, nil
 	}
 
 	// empty value matches with all namespaces
-	if len(allowedNs.NamespacesList) == 0 {
-		return true
+	if len(allowedNs.NamespaceList) == 0 {
+		return true, nil
 	}
 
-	for _, v := range (*allowedNs).NamespacesList {
-		if v == ns {
-			return true
+	for _, v := range (*allowedNs).NamespaceList {
+		if v == clusterNamespace {
+			return true, nil
 		}
 	}
 
-	return false
+	// Check if clusterNamespace is in the namespaces selected by the principal's allowedNamespaces selector.
+	namespaces := &corev1.NamespaceList{}
+	selector, err := metav1.LabelSelectorAsSelector(&allowedNs.Selector)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to get label selector from spec selector")
+	}
+
+	// If a Selector has a nil or empty selector, it should match nothing, not everything.
+	if selector.Empty() {
+		return false, nil
+	}
+
+	if err := k8sClient.List(context.Background(), namespaces, client.MatchingLabelsSelector{Selector: selector}); err != nil {
+		return false, errors.Wrap(err, "failed to list namespaces")
+	}
+
+	for i := range namespaces.Items {
+		n := &namespaces.Items[i]
+		if n.Name == clusterNamespace {
+			return true, nil
+		}
+	}
+	return false, nil
 }

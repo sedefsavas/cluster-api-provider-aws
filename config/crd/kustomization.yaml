@@ -14,6 +14,8 @@ resources:
 - bases/infrastructure.cluster.x-k8s.io_awsclusterroleprincipals.yaml
 - bases/infrastructure.cluster.x-k8s.io_awsclusterstaticprincipals.yaml
 - bases/infrastructure.cluster.x-k8s.io_awsclustercontrollerprincipals.yaml
+- bases/instance_awsclustercontrollerprincipals.yaml
+
 
 
 # +kubebuilder:scaffold:crdkustomizeresource

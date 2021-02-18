@@ -23,11 +23,17 @@ import (
 
 type AWSClusterPrincipalSpec struct {
 	// +optional
-	AllowedNamespaces *AllowedNamespacesList `json:"allowedNamespaces"`
+	AllowedNamespaces *AllowedNamespaces `json:"allowedNamespaces,omitempty"`
 }
 
-type AllowedNamespacesList struct {
-	NamespacesList []string `json:"list"`
+type AllowedNamespaces struct {
+	// +optional
+	// +nullable
+	NamespaceList []string `json:"list"`
+
+	// Label selector for namespaces. Namespaces selected by this will be allowed to use principals.
+	// +optional
+	Selector metav1.LabelSelector `json:"selector"`
 }
 
 type AWSRoleSpec struct {
