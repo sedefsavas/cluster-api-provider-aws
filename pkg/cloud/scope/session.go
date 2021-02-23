@@ -106,6 +106,8 @@ func sessionForClusterWithRegion(k8sClient client.Client, awsCluster *infrav1.AW
 
 	providers, err := getProvidersForCluster(context.Background(), k8sClient, awsCluster, log)
 	if err != nil {
+		// could not get providers and retrieve the credentials
+		conditions.MarkFalse(awsCluster, infrav1.PrincipalCredentialRetrievedCondition, infrav1.PrincipalCredentialRetrievalFailedReason, clusterv1.ConditionSeverityError, err.Error())
 		return nil, nil, errors.Wrap(err, "Failed to get providers for cluster")
 
 	}
@@ -145,7 +147,7 @@ func sessionForClusterWithRegion(k8sClient client.Client, awsCluster *infrav1.AW
 		// Check if principal credentials can be retrieved. One reason this will fail is that source principal is not authorized for assume role.
 		_, err := providers[0].Retrieve()
 		if err != nil {
-			conditions.MarkFalse(awsCluster, infrav1.PrincipalCredentialRetrievedCondition, infrav1.PrincipalCredentialRetrievalFailedReason, clusterv1.ConditionSeverityError, err.Error())
+			conditions.MarkUnknown(awsCluster, infrav1.PrincipalCredentialRetrievedCondition, infrav1.ProviderBuildFailedReason, err.Error())
 			return nil, nil, errors.Wrap(err, "Failed to retrieve principal credentials")
 		}
 		awsConfig = awsConfig.WithCredentials(credentials.NewChainCredentials(awsProviders))
@@ -238,6 +240,7 @@ func buildProvidersForRef(ctx context.Context, providers []AWSPrincipalTypeProvi
 	var provider AWSPrincipalTypeProvider
 	principalObjectKey := client.ObjectKey{Name: ref.Name}
 	log.V(4).Info("Get Principal", "Key", principalObjectKey)
+
 	switch ref.Kind {
 	case "AWSClusterControllerPrincipal":
 		principal := &infrav1.AWSClusterControllerPrincipal{}
@@ -247,17 +250,20 @@ func buildProvidersForRef(ctx context.Context, providers []AWSPrincipalTypeProvi
 		if err != nil {
 			return providers, err
 		}
+
 		canUse, err := IsClusterPermittedToUsePrincipal(k8sClient, principal.Spec.AllowedNamespaces, awsCluster.Namespace)
+
 		if err != nil {
 			return providers, err
 		}
 		if !canUse {
+			errMsg := fmt.Sprintf("AWSCluster %s/%s is not permitted to use principal %s", awsCluster.Namespace, awsCluster.Name, principal.Name)
 			if awsCluster.Spec.PrincipalRef.Name == principal.Name {
-				conditions.MarkFalse(awsCluster, infrav1.PrincipalUsageAllowedCondition, infrav1.PrincipalUsageUnauthorizedReason, clusterv1.ConditionSeverityError, err.Error())
+				conditions.MarkFalse(awsCluster, infrav1.PrincipalUsageAllowedCondition, infrav1.PrincipalUsageUnauthorizedReason, clusterv1.ConditionSeverityError, errMsg)
 			} else {
-				conditions.MarkFalse(awsCluster, infrav1.PrincipalUsageAllowedCondition, infrav1.SourcePrincipalUsageUnauthorizedReason, clusterv1.ConditionSeverityError, err.Error())
+				conditions.MarkFalse(awsCluster, infrav1.PrincipalUsageAllowedCondition, infrav1.SourcePrincipalUsageUnauthorizedReason, clusterv1.ConditionSeverityError, errMsg)
 			}
-			return providers, errors.Errorf("AWSCluster %s/%s is not permitted to use principal %s", awsCluster.Namespace, awsCluster.Name, principal.Name)
+			return providers, errors.Errorf(errMsg)
 		}
 
 		// returning empty provider list to default to Controller Principal.

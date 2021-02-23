@@ -23,7 +23,7 @@ import (
 
 type AWSClusterPrincipalSpec struct {
 	// +optional
-	AllowedNamespaces *AllowedNamespaces `json:"allowedNamespaces,omitempty"`
+	AllowedNamespaces *AllowedNamespaces `json:"allowedNamespaces"`
 }
 
 type AllowedNamespaces struct {

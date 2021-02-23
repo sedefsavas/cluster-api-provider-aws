@@ -42,6 +42,7 @@ import (
 	"sigs.k8s.io/cluster-api-provider-aws/controllers"
 	controlplanev1 "sigs.k8s.io/cluster-api-provider-aws/controlplane/eks/api/v1alpha3"
 	infrav1alpha3exp "sigs.k8s.io/cluster-api-provider-aws/exp/api/v1alpha3"
+	"sigs.k8s.io/cluster-api-provider-aws/exp/controllerprincipalcreator"
 	controllersexp "sigs.k8s.io/cluster-api-provider-aws/exp/controllers"
 	"sigs.k8s.io/cluster-api-provider-aws/exp/instancestate"
 	"sigs.k8s.io/cluster-api-provider-aws/feature"
@@ -193,7 +194,6 @@ func main() {
 				os.Exit(1)
 			}
 		}
-
 		if feature.Gates.Enabled(feature.EventBridgeInstanceState) {
 			setupLog.Info("EventBridge notifications enabled. enabling AWSInstanceStateController")
 			if err = (&instancestate.AwsInstanceStateReconciler{
@@ -205,7 +205,17 @@ func main() {
 				os.Exit(1)
 			}
 		}
-
+		if feature.Gates.Enabled(feature.AutoControllerPrincipalCreator) {
+			setupLog.Info("AutoControllerPrincipalCreator enabled")
+			if err = (&controllerprincipalcreator.AWSControllerPrincipalReconciler{
+				Client:    mgr.GetClient(),
+				Log:       ctrl.Log.WithName("controllers").WithName("AWSControllerPrincipal"),
+				Endpoints: AWSServiceEndpoints,
+			}).SetupWithManager(mgr, controller.Options{}); err != nil {
+				setupLog.Error(err, "unable to create controller", "controller", "AWSControllerPrincipal")
+				os.Exit(1)
+			}
+		}
 	} else {
 		if err = (&infrav1alpha3.AWSMachineTemplate{}).SetupWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "AWSMachineTemplate")

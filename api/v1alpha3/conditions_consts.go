@@ -24,6 +24,8 @@ const (
 	PrincipalCredentialRetrievedCondition clusterv1.ConditionType = "PrincipalCredentialRetrieved"
 	// PrincipalCredentialRetrievalFailedReason used when errors occur during principal credential retrieval.
 	PrincipalCredentialRetrievalFailedReason = "PrincipalCredentialRetrievalFailed"
+	// ProviderBuildFailedReason used when errors occur during building providers before trying credential retrieval.
+	ProviderBuildFailedReason = "ProviderBuildFailed"
 
 	// PrincipalUsageAllowedCondition reports on whether Principal and all the nested source principals are allowed to be used in the AWSCluster namespace.
 	PrincipalUsageAllowedCondition clusterv1.ConditionType = "PrincipalUsageAllowed"

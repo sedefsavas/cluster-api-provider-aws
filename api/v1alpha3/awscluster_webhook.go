@@ -116,9 +116,9 @@ func (r *AWSCluster) Default() {
 
 	if r.Spec.PrincipalRef == nil {
 		r.Spec.PrincipalRef = &corev1.ObjectReference{
-			Kind: "AWSClusterControllerPrincipal",
+			Kind:       "AWSClusterControllerPrincipal",
 			APIVersion: GroupVersion.String(),
-			Name: AWSClusterControllerPrincipalName,
+			Name:       AWSClusterControllerPrincipalName,
 		}
 	}
 }
