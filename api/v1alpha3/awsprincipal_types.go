@@ -22,16 +22,30 @@ import (
 )
 
 type AWSClusterPrincipalSpec struct {
+	// AllowedNamespaces is used to identify which namespaces are allowed to use the principal from.
+	// Namespaces can be selected either using an array of namespaces or with label selector.
+	// An empty allowedNamespaces object indicates that AWSClusters can use this principal from any namespace.
+	// If this object is nil, no namespaces will be allowed (default behaviour, if this field is not provided)
+	// A namespace should be either in the NamespaceList or match with Selector to use the principal.
+	//
 	// +optional
 	AllowedNamespaces *AllowedNamespaces `json:"allowedNamespaces"`
 }
 
 type AllowedNamespaces struct {
+	// An nil or empty list indicates that AWSClusters cannot use the principal from any namespace.
+	//
 	// +optional
 	// +nullable
 	NamespaceList []string `json:"list"`
 
-	// Label selector for namespaces. Namespaces selected by this will be allowed to use principals.
+	// AllowedNamespaces is a selector of namespaces that AWSClusters can
+	// use this ClusterPrincipal from. This is a standard Kubernetes LabelSelector,
+	// a label query over a set of resources. The result of matchLabels and
+	// matchExpressions are ANDed.
+	//
+	// An empty selector indicates that AWSClusters cannot use this
+	// AWSClusterPrincipal from any namespace.
 	// +optional
 	Selector metav1.LabelSelector `json:"selector"`
 }
@@ -89,6 +103,8 @@ type AWSClusterStaticPrincipalSpec struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:path=awsclusterroleprincipals,scope=Cluster,categories=cluster-api
+// +kubebuilder:storageversion
+
 type AWSClusterRolePrincipal struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -128,6 +144,8 @@ type AWSClusterRolePrincipalSpec struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:path=awsclustercontrollerprincipals,scope=Cluster,categories=cluster-api
+// +kubebuilder:storageversion
+
 type AWSClusterControllerPrincipal struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

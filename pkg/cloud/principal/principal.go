@@ -14,22 +14,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package scope
+package principal
 
 import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/gob"
-	"fmt"
+	"time"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
-	"github.com/aws/aws-sdk-go/aws/defaults"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/sts/stsiface"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	infrav1 "sigs.k8s.io/cluster-api-provider-aws/api/v1alpha3"
-	"time"
 )
 
 type AWSPrincipalTypeProvider interface {
@@ -38,46 +38,6 @@ type AWSPrincipalTypeProvider interface {
 	// for this Principal
 	Hash() (string, error)
 	Name() string
-}
-
-func NewAWSControllerPrincipalTypeProvider() *AWSControllerPrincipalTypeProvider {
-	def := defaults.Get()
-	creds, _ := def.Config.Credentials.Get()
-	fmt.Println(creds)
-
-	return &AWSControllerPrincipalTypeProvider{
-		credentials:     credentials.NewStaticCredentials(creds.AccessKeyID, creds.SecretAccessKey, creds.SessionToken),
-		accessKeyID:     creds.AccessKeyID,
-		secretAccessKey: creds.SecretAccessKey,
-		sessionToken:    creds.SessionToken,
-	}
-}
-
-type AWSControllerPrincipalTypeProvider struct {
-	credentials *credentials.Credentials
-	// these are for tests :/
-	accessKeyID     string
-	secretAccessKey string
-	sessionToken    string
-}
-
-func (p *AWSControllerPrincipalTypeProvider) Retrieve() (credentials.Value, error) {
-	return p.credentials.Get()
-}
-func (p *AWSControllerPrincipalTypeProvider) IsExpired() bool {
-	return p.credentials.IsExpired()
-}
-func (p *AWSControllerPrincipalTypeProvider) Name() string {
-	return "controller-principal"
-}
-func (p *AWSControllerPrincipalTypeProvider) Hash() (string, error) {
-	var roleIdentityValue bytes.Buffer
-	err := gob.NewEncoder(&roleIdentityValue).Encode(p)
-	if err != nil {
-		return "", err
-	}
-	hash := sha256.New()
-	return string(hash.Sum(roleIdentityValue.Bytes())), nil
 }
 
 func NewAWSStaticPrincipalTypeProvider(principal *infrav1.AWSClusterStaticPrincipal, secret *corev1.Secret) *AWSStaticPrincipalTypeProvider {
@@ -94,18 +54,22 @@ func NewAWSStaticPrincipalTypeProvider(principal *infrav1.AWSClusterStaticPrinci
 	}
 }
 
-func GetAssumeRoleCredentials(principal *infrav1.AWSClusterRolePrincipal, awsConfig *aws.Config) *credentials.Credentials {
+func GetAssumeRoleCredentials(rolePrincipalProvider *AWSRolePrincipalTypeProvider, awsConfig *aws.Config) *credentials.Credentials {
 	sess := session.Must(session.NewSession(awsConfig))
 
-	creds := stscreds.NewCredentials(sess, principal.Spec.RoleArn, func(p *stscreds.AssumeRoleProvider) {
-		if principal.Spec.ExternalID != "" {
-			p.ExternalID = aws.String(principal.Spec.ExternalID)
+	creds := stscreds.NewCredentials(sess, rolePrincipalProvider.Principal.Spec.RoleArn, func(p *stscreds.AssumeRoleProvider) {
+		if rolePrincipalProvider.Principal.Spec.ExternalID != "" {
+			p.ExternalID = aws.String(rolePrincipalProvider.Principal.Spec.ExternalID)
 		}
-		p.RoleSessionName = principal.Spec.SessionName
-		if principal.Spec.InlinePolicy != "" {
-			p.Policy = aws.String(principal.Spec.InlinePolicy)
+		p.RoleSessionName = rolePrincipalProvider.Principal.Spec.SessionName
+		if rolePrincipalProvider.Principal.Spec.InlinePolicy != "" {
+			p.Policy = aws.String(rolePrincipalProvider.Principal.Spec.InlinePolicy)
 		}
-		p.Duration = time.Duration(principal.Spec.DurationSeconds) * time.Second
+		p.Duration = time.Duration(rolePrincipalProvider.Principal.Spec.DurationSeconds) * time.Second
+		// For testing
+		if rolePrincipalProvider.stsClient != nil {
+			p.Client = rolePrincipalProvider.stsClient
+		}
 	})
 	return creds
 }
@@ -152,6 +116,7 @@ type AWSRolePrincipalTypeProvider struct {
 	credentials    *credentials.Credentials
 	sourceProvider *AWSPrincipalTypeProvider
 	log            logr.Logger
+	stsClient      stsiface.STSAPI
 }
 
 func (p *AWSRolePrincipalTypeProvider) Hash() (string, error) {
@@ -178,7 +143,7 @@ func (p *AWSRolePrincipalTypeProvider) Retrieve() (credentials.Value, error) {
 			awsConfig = awsConfig.WithCredentials(credentials.NewStaticCredentialsFromCreds(sourceCreds))
 		}
 
-		creds := GetAssumeRoleCredentials(p.Principal, awsConfig)
+		creds := GetAssumeRoleCredentials(p, awsConfig)
 		// Update credentials
 		p.credentials = creds
 	}

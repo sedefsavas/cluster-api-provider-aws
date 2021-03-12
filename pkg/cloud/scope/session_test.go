@@ -128,7 +128,7 @@ func TestIsClusterPermittedToUsePrincipal(t *testing.T) {
 			name: "A namespace is not permitted if allowedNamespaces list and selector do not have it",
 			clusterNamespace: "default",
 			allowedNs: &infrav1.AllowedNamespaces{
-				NamespaceList: []string{"nomatch"},
+				NamespaceList: nil,
 				Selector:      metav1.LabelSelector{
 					MatchLabels: map[string]string{"ns": "nomatchlabel"},
 				},
